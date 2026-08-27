@@ -1,0 +1,34 @@
+{
+  "name": "clashofcode-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ClashOfCode backend — three independently deployable services (api, match-server, judge-worker) sharing one types/schema package.",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "build:shared": "pnpm --filter @clashofcode/shared build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "clean": "pnpm -r exec rimraf dist tsconfig.tsbuildinfo",
+    "dev:api": "pnpm build:shared && pnpm --filter @clashofcode/api dev",
+    "dev:match": "pnpm build:shared && pnpm --filter @clashofcode/match-server dev",
+    "dev:judge": "pnpm build:shared && pnpm --filter @clashofcode/judge-worker dev",
+    "migrate": "pnpm --filter @clashofcode/infra migrate",
+    "seed": "pnpm build:shared && pnpm --filter @clashofcode/infra seed",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "judge0:up": "docker compose -f infra/judge0/docker-compose.judge0.yml up -d",
+    "judge0:down": "docker compose -f infra/judge0/docker-compose.judge0.yml down"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,62 @@
+# infra/judge0/docker-compose.judge0.yml
+#
+# The Judge0 stack is deliberately its OWN compose file and its OWN Postgres/Redis
+# (Architecture §8): this is the only part of the system that runs untrusted user
+# code, so it is isolated from the app's database and cache. Only the API port
+# (2358) is exposed; point JUDGE0_URL at it.
+#
+# NOTE: the `workers` service needs cgroup/privileged access to sandbox code and
+# is intended for a Linux host. On Docker Desktop (Windows/macOS) isolation is
+# best-effort — fine for local dev, not for production.
+
+x-judge0-env: &judge0-env
+  REDIS_HOST: judge0-redis
+  REDIS_PORT: "6379"
+  POSTGRES_HOST: judge0-db
+  POSTGRES_DB: judge0
+  POSTGRES_USER: judge0
+  POSTGRES_PASSWORD: judge0
+
+services:
+  server:
+    image: judge0/judge0:1.13.1
+    command: ["./scripts/server"]
+    environment: *judge0-env
+    ports:
+      - "2358:2358"
+    depends_on:
+      - judge0-db
+      - judge0-redis
+    privileged: true
+    restart: unless-stopped
+
+  workers:
+    image: judge0/judge0:1.13.1
+    command: ["./scripts/workers"]
+    environment: *judge0-env
+    depends_on:
+      - judge0-db
+      - judge0-redis
+    privileged: true
+    restart: unless-stopped
+
+  judge0-db:
+    image: postgres:13-alpine
+    environment:
+      POSTGRES_DB: judge0
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: judge0
+    volumes:
+      - judge0-pg:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  judge0-redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - judge0-redis:/data
+    restart: unless-stopped
+
+volumes:
+  judge0-pg:
+  judge0-redis:

@@ -1,0 +1,9 @@
+packages:
+  - 'packages/*'
+  - 'services/*'
+  - 'infra'
+
+# pnpm 11 gates package build scripts behind an explicit allow-list.
+# esbuild is pulled in transitively by tsx.
+allowBuilds:
+  esbuild: true

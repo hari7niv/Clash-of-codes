@@ -1,0 +1,21 @@
+{
+  "name": "@clashofcode/infra",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "migrate": "tsx scripts/migrate.ts",
+    "seed": "tsx scripts/seed-problems.ts && tsx scripts/seed-dev-users.ts",
+    "seed:problems": "tsx scripts/seed-problems.ts",
+    "seed:users": "tsx scripts/seed-dev-users.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.7",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/pg": "^8.11.10"
+  }
+}
