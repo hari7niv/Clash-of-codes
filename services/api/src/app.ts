@@ -20,9 +20,16 @@ export const buildApp = async () => {
   });
 
   // Plugins
-  await app.register(cors, { origin: true }); // Configure origin properly in prod
+  await app.register(cors, {
+    origin: process.env.NODE_ENV === "production" ? (process.env.CORS_ORIGIN || false) : true,
+  });
+  
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret && process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET environment variable is required in production!");
+  }
   await app.register(jwt, {
-    secret: process.env.JWT_SECRET || "supersecret-dev-key", // Use robust secret in prod
+    secret: jwtSecret || "supersecret-dev-key",
   });
   await app.register(rateLimit, {
     max: 100,

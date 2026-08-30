@@ -7,7 +7,7 @@ import * as matchesSchema from "./schema/matches.js";
 
 dotenv.config();
 
-const connectionString = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/clashofcode";
+const connectionString = process.env.DATABASE_URL || "postgresql://clash:clash@localhost:5440/clashofcode";
 
 export const pool = new Pool({
   connectionString,

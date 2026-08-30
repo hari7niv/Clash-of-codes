@@ -12,7 +12,7 @@ export function useFriendsData() {
     async function fetchData() {
       try {
         const [friendsRes] = await Promise.all([
-          api.get("/friends/friends").catch(() => api.get("/friends")), // Fallback in case route path is just /friends
+          api.get("/friends"),
         ]);
 
         setData({

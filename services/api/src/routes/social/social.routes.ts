@@ -10,7 +10,7 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.get("/friends", async (request, reply) => {
+  app.get("/", async (request, reply) => {
     const { id } = request.user as { id: string };
     const friends = await getFriends(id);
     return friends;

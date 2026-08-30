@@ -14,7 +14,7 @@ export function useBattleData(matchId: string) {
       try {
         const [playerRes, matchRes] = await Promise.all([
           api.get("/users/me"),
-          api.get(`/matches/${matchId}`).catch(() => ({ data: null })), // Handle mock or missing match gracefully
+          api.get(`/matches/${matchId}`),
         ]);
 
         setData({

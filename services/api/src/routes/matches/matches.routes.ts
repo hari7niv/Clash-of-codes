@@ -11,10 +11,24 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/:matchId", async (request, reply) => {
+    const { id: userId } = request.user as { id: string };
     const { matchId } = request.params as any;
-    const data = await getMatchById(matchId);
+    
+    // Ensure input matches format check for UUID (safe regex or direct UUID validation)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(matchId)) {
+      return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Invalid match ID format (must be a valid UUID)" } });
+    }
+
+    const data = await getMatchById(matchId, userId);
     if (!data) {
       return reply.code(404).send({ error: { code: "NOT_FOUND", message: "Match not found" } });
+    }
+
+    // Verify requesting user is part of the match
+    const isParticipant = data.match.playerOneId === userId || data.match.playerTwoId === userId;
+    if (!isParticipant) {
+      return reply.code(403).send({ error: { code: "FORBIDDEN", message: "You are not authorized to view this match" } });
     }
 
     return {
@@ -51,12 +65,23 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
       const { matchId } = request.params as any;
       const body = request.body as { code: string; language: string; action: "run" | "submit" };
 
-      const matchData = await getMatchById(matchId);
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(matchId)) {
+        return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Invalid match ID format (must be a valid UUID)" } });
+      }
+
+      const matchData = await getMatchById(matchId, userId);
       if (!matchData) {
         return reply.code(404).send({ error: { code: "NOT_FOUND", message: "Match not found" } });
       }
 
-      // Simulated judging verdict mapping to database
+      // Check if user is part of the match
+      const belongsToMatch = matchData.match.playerOneId === userId || matchData.match.playerTwoId === userId;
+      if (!belongsToMatch) {
+        return reply.code(403).send({ error: { code: "FORBIDDEN", message: "You are not a participant in this match" } });
+      }
+
+      // Simulated judging verdict mapping to database (we will improve this when judge-worker runs, for now we keep it and clean up placeholder verification)
       const submission = await createSubmission({
         matchId,
         userId,

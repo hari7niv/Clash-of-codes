@@ -11,24 +11,42 @@ export const createRoom = async (data: {
   maxPlayers?: number;
   timeControl?: string;
 }) => {
-  const roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
-  
-  const [newRoom] = await db.insert(rooms).values({
-    code: roomCode,
-    hostUserId: data.hostUserId,
-    isPrivate: data.isPrivate ?? true,
-    maxPlayers: data.maxPlayers ?? 2,
-    timeControl: data.timeControl ?? "standard",
-    status: "open",
-  }).returning();
+  return await db.transaction(async (tx) => {
+    let roomCode = "";
+    let attempts = 0;
+    
+    // Generate unique 6-character alphanumeric code
+    while (attempts < 10) {
+      const candidate = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const [existing] = await tx.select().from(rooms).where(eq(rooms.code, candidate));
+      if (!existing) {
+        roomCode = candidate;
+        break;
+      }
+      attempts++;
+    }
+    
+    if (!roomCode) {
+      throw new Error("Failed to generate a unique room code. Please try again.");
+    }
+    
+    const [newRoom] = await tx.insert(rooms).values({
+      code: roomCode,
+      hostUserId: data.hostUserId,
+      isPrivate: data.isPrivate ?? true,
+      maxPlayers: data.maxPlayers ?? 2,
+      timeControl: data.timeControl ?? "standard",
+      status: "open",
+    }).returning();
 
-  // Host joins the room as a member
-  await db.insert(roomMembers).values({
-    roomId: newRoom.id,
-    userId: data.hostUserId,
+    // Host joins the room as a member
+    await tx.insert(roomMembers).values({
+      roomId: newRoom.id,
+      userId: data.hostUserId,
+    });
+
+    return newRoom;
   });
-
-  return newRoom;
 };
 
 export const getRoomByCode = async (code: string) => {
@@ -71,23 +89,39 @@ export const getRoomByCode = async (code: string) => {
 };
 
 export const joinRoom = async (code: string, userId: string) => {
-  const [room] = await db.select().from(rooms).where(eq(rooms.code, code));
-  if (!room) return null;
+  return await db.transaction(async (tx) => {
+    const [room] = await tx.select().from(rooms).where(eq(rooms.code, code));
+    if (!room) return null;
 
-  // Check if already a member
-  const [existing] = await db
-    .select()
-    .from(roomMembers)
-    .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, userId)));
+    if (room.status !== "open") {
+      throw new Error("This room is no longer open for joining.");
+    }
 
-  if (!existing) {
-    await db.insert(roomMembers).values({
-      roomId: room.id,
-      userId,
-    });
-  }
+    // Check if already a member
+    const [existing] = await tx
+      .select()
+      .from(roomMembers)
+      .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, userId)));
 
-  return room;
+    if (!existing) {
+      // Get current member count
+      const members = await tx
+        .select()
+        .from(roomMembers)
+        .where(eq(roomMembers.roomId, room.id));
+
+      if (members.length >= room.maxPlayers) {
+        throw new Error("This room has reached its maximum capacity.");
+      }
+
+      await tx.insert(roomMembers).values({
+        roomId: room.id,
+        userId,
+      });
+    }
+
+    return room;
+  });
 };
 
 export const leaveRoom = async (code: string, userId: string) => {

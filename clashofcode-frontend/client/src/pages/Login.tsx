@@ -7,7 +7,77 @@ import { ArrowRight, KeyRound, Mail, ShieldCheck } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { Link, useLocation } from "wouter";
 
-type Errors = { email?: string; password?: string };
+import { api } from "@/lib/api";
+
+type Errors = { email?: string; password?: string; general?: string };
 const validEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
-export default function Login() { const [, setLocation] = useLocation(); const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [errors, setErrors] = useState<Errors>({}); const submit = (event: FormEvent) => { event.preventDefault(); const next: Errors = {}; if (!email.trim()) next.email = "Email is required."; else if (!validEmail(email)) next.email = "Enter a valid email address."; if (!password) next.password = "Password is required."; setErrors(next); if (!Object.keys(next).length) setLocation("/app"); }; return <PublicShell authView="login"><main className="auth-stage"><section className="auth-story"><p className="section-kicker">Arena entry / member access</p><h1>Pick up the<br /><em>thread.</em></h1><p>Return to your rating, active rooms, and next head-to-head battle.</p><div className="auth-stat"><ShieldCheck className="h-5 w-5 text-[#b5df73]" /><span>YOUR LAST SESSION<br /><b>+18 RATING / 2 WINS</b></span></div></section><section className="auth-panel"><div className="auth-panel-heading"><span className="auth-sigil"><KeyRound className="h-5 w-5" /></span><div><p className="section-kicker">Welcome back</p><h2>Log in to your arena.</h2></div></div><form noValidate onSubmit={submit} className="auth-form"><label>Email address<input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" aria-invalid={Boolean(errors.email)} className={errors.email ? "is-invalid" : ""} placeholder="you@example.com" />{errors.email && <span className="field-error">{errors.email}</span>}</label><label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" aria-invalid={Boolean(errors.password)} className={errors.password ? "is-invalid" : ""} placeholder="Enter your password" />{errors.password && <span className="field-error">{errors.password}</span>}</label><div className="flex items-center justify-between gap-3"><a href="#forgot-password" className="auth-link">Forgot password?</a><button className="primary-button" type="submit">Log in <ArrowRight className="h-4 w-4" /></button></div></form><p className="auth-switch">New to ClashOfCode? <Link href="/signup">Create an account</Link></p></section></main></PublicShell>; }
+export default function Login() {
+  const [, setLocation] = useLocation();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<Errors>({});
+  
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const next: Errors = {};
+    if (!email.trim()) next.email = "Email is required.";
+    else if (!validEmail(email)) next.email = "Enter a valid email address.";
+    if (!password) next.password = "Password is required.";
+    setErrors(next);
+    
+    if (Object.keys(next).length > 0) return;
+    
+    try {
+      const response = await api.post("/auth/login", { email, password });
+      if (response.data?.accessToken) {
+        localStorage.setItem("token", response.data.accessToken);
+        setLocation("/app");
+      } else {
+        setErrors({ general: "Invalid response from server." });
+      }
+    } catch (err: any) {
+      const errMsg = err.response?.data?.error?.message || "Invalid credentials or server connection failed.";
+      setErrors({ general: errMsg });
+    }
+  };
+  
+  return <PublicShell authView="login">
+    <main className="auth-stage">
+      <section className="auth-story">
+        <p className="section-kicker">Arena entry / member access</p>
+        <h1>Pick up the<br /><em>thread.</em></h1>
+        <p>Return to your rating, active rooms, and next head-to-head battle.</p>
+        <div className="auth-stat">
+          <ShieldCheck className="h-5 w-5 text-[#b5df73]" />
+          <span>YOUR LAST SESSION<br /><b>+18 RATING / 2 WINS</b></span>
+        </div>
+      </section>
+      <section className="auth-panel">
+        <div className="auth-panel-heading">
+          <span className="auth-sigil"><KeyRound className="h-5 w-5" /></span>
+          <div>
+            <p className="section-kicker">Welcome back</p>
+            <h2>Log in to your arena.</h2>
+          </div>
+        </div>
+        <form noValidate onSubmit={submit} className="auth-form">
+          {errors.general && <div className="field-error text-center mb-4 p-2 bg-red-950/20 border border-red-500/30 rounded text-red-400">{errors.general}</div>}
+          <label>Email address
+            <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" aria-invalid={Boolean(errors.email)} className={errors.email ? "is-invalid" : ""} placeholder="you@example.com" />
+            {errors.email && <span className="field-error">{errors.email}</span>}
+          </label>
+          <label>Password
+            <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" aria-invalid={Boolean(errors.password)} className={errors.password ? "is-invalid" : ""} placeholder="Enter your password" />
+            {errors.password && <span className="field-error">{errors.password}</span>}
+          </label>
+          <div className="flex items-center justify-between gap-3">
+            <a href="#forgot-password" className="auth-link">Forgot password?</a>
+            <button className="primary-button" type="submit">Log in <ArrowRight className="h-4 w-4" /></button>
+          </div>
+        </form>
+        <p className="auth-switch">New to ClashOfCode? <Link href="/signup">Create an account</Link></p>
+      </section>
+    </main>
+  </PublicShell>;
+}

@@ -24,28 +24,42 @@ async function main(): Promise<void> {
       .filter((f) => f.endsWith('.sql'))
       .sort();
 
-    let count = 0;
-    for (const file of files) {
-      if (applied.has(file)) {
-        console.log(`skip   ${file}`);
-        continue;
-      }
-      const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
-      console.log(`apply  ${file}`);
-      await client.query('BEGIN');
-      try {
-        await client.query(sql);
-        await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
-        await client.query('COMMIT');
-        count += 1;
-      } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-      }
-    }
+    let appliedCount = 0;
+let skippedCount = 0;
 
-    console.log(`\nDone. Applied ${count} migration(s), ${files.length - count} already up to date.`);
-  } finally {
+for (const file of files) {
+  if (applied.has(file)) {
+    console.log(`skip   ${file}`);
+    skippedCount += 1;
+    continue;
+  }
+
+  const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
+
+  console.log(`apply  ${file}`);
+
+  await client.query('BEGIN');
+
+  try {
+    await client.query(sql);
+
+    await client.query(
+      'INSERT INTO schema_migrations (filename) VALUES ($1)',
+      [file],
+    );
+
+    await client.query('COMMIT');
+    appliedCount += 1;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  }
+}
+
+console.log(
+  `\nDone. Applied ${appliedCount} migration(s), ` +
+  `${skippedCount} already up to date.`,
+);  } finally {
     client.release();
     await pool.end();
   }

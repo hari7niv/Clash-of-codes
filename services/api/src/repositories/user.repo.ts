@@ -74,19 +74,30 @@ export const updateUser = async (id: string, data: { username?: string }) => {
 };
 
 export const getFriends = async (userId: string) => {
-  // Select friends by joining friendships with users table
+  // Query relationships where the user is either user_id or friend_id and status is accepted
   const userFriendships = await db
     .select({
       id: users.id,
       username: users.username,
       rating: users.rating,
-      gamesPlayed: users.gamesPlayed,
-      wins: users.wins,
       status: friendships.status,
     })
     .from(friendships)
-    .innerJoin(users, eq(friendships.friendId, users.id))
-    .where(eq(friendships.userId, userId));
+    .innerJoin(
+      users,
+      // If the friendship record user_id matches us, join on the friend_id user record.
+      // If the friendship record friend_id matches us, join on the user_id user record.
+      eq(
+        users.id,
+        db.raw(`CASE WHEN friendships.user_id = '${userId}'::uuid THEN friendships.friend_id ELSE friendships.user_id END`)
+      )
+    )
+    .where(
+      and(
+        db.raw(`(friendships.user_id = '${userId}'::uuid OR friendships.friend_id = '${userId}'::uuid)`),
+        eq(friendships.status, "accepted")
+      )
+    );
 
   return userFriendships.map(uf => {
     const ratingInt = Math.round(uf.rating);

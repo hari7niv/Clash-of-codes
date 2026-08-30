@@ -4,12 +4,18 @@ import { problems } from "../db/schema/problems.js";
 import { users } from "../db/schema/users.js";
 import { eq, and } from "drizzle-orm";
 
-export const getMatchById = async (matchId: string) => {
+export const getMatchById = async (matchId: string, currentUserId?: string) => {
   const [match] = await db.select().from(matches).where(eq(matches.id, matchId));
   if (!match) return null;
 
   const [problem] = await db.select().from(problems).where(eq(problems.id, match.problemId));
-  const opponentId = match.playerTwoId; // Simplification (assuming client is playerOne)
+  
+  // Dynamically select the opponent depending on who is requesting the data
+  let opponentId = match.playerTwoId;
+  if (currentUserId && match.playerTwoId === currentUserId) {
+    opponentId = match.playerOneId;
+  }
+  
   const [opponent] = opponentId 
     ? await db.select().from(users).where(eq(users.id, opponentId))
     : [null];
@@ -55,15 +61,21 @@ export const getMatchResult = async (matchId: string, userId: string) => {
     .where(and(eq(ratingsHistory.matchId, matchId), eq(ratingsHistory.userId, userId)));
 
   const isWinner = match.winnerId === userId;
+  const isDraw = match.winnerId === null && match.status === "completed";
   const ratingDelta = ratingHist ? ratingHist.delta : 0;
 
+  const outcome = isWinner ? "VICTORY" as const : (isDraw ? "DRAW" as const : "DEFEAT" as const);
+  const summaryLine = isWinner 
+    ? "You found the window faster." 
+    : (isDraw ? "Both players finished with similar scores." : "Your opponent solved it faster.");
+
   return {
-    outcome: isWinner ? "VICTORY" as const : "DEFEAT" as const,
+    outcome,
     matchCode: `#${match.id.substring(0, 4).toUpperCase()}`,
-    summaryLine: isWinner ? "You found the window faster." : "Your opponent solved it faster.",
+    summaryLine,
     ratingChange: Math.round(ratingDelta),
     newRating: ratingHist ? Math.round(ratingHist.ratingAfter) : 1500,
-    xpEarned: isWinner ? 150 : 50,
+    xpEarned: isWinner ? 150 : (isDraw ? 100 : 50),
     xp: 250,
     xpGoal: 1000,
     winStreak: isWinner ? 1 : 0,

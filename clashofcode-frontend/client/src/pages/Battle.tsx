@@ -5,7 +5,7 @@
 import { Avatar, MatchLine, Pill } from "@/components/ArenaPrimitives";
 import { Check, ChevronDown, Code2, Play, Send, TerminalSquare, Timer, Wifi } from "lucide-react";
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { useBattleData } from "@/hooks/useBattleData";
 
 const lineNumbers = Array.from({ length: 15 }, (_, index) => index + 1);
@@ -28,8 +28,10 @@ const defaultCodeSnippet = `function minWindow(s: string, t: string): string {
 
 export default function Battle() {
   const [, setLocation] = useLocation();
+  const [match, params] = useRoute("/battle/:matchId");
+  const matchId = params?.matchId || "mock-match-123";
   const [runState, setRunState] = useState<"idle" | "running" | "passed">("idle");
-  const { player, matchData, loading, error } = useBattleData("mock-match-123");
+  const { player, matchData, loading, error } = useBattleData(matchId);
 
   if (loading) return <div className="page-wrap enter-up p-8 flex justify-center text-[#848792]">Loading match...</div>;
   if (error || !player) return <div className="page-wrap enter-up p-8 flex justify-center text-[#e48b87]">Error loading match.</div>;

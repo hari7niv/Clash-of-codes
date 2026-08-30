@@ -3,21 +3,12 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { createUser, getUserByEmail, toPublicUser } from "../../repositories/user.repo.js";
 
-const signupSchema = z.object({
-  username: z.string(),
-  email: z.string().email(),
-  password: z.string().min(6),
-});
-
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string(),
-});
+import { registerSchema, loginSchema } from "@clashofcode/shared";
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
   app.post("/signup", async (request, reply) => {
     try {
-      const data = signupSchema.parse(request.body);
+      const data = registerSchema.parse(request.body);
       
       const existingUser = await getUserByEmail(data.email);
       if (existingUser) {

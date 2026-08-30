@@ -27,5 +27,10 @@ if (!DATABASE_URL) {
 export const MIGRATIONS_DIR = resolve(__dirname, '..', 'migrations');
 
 export function createPool(): Pool {
-  return new Pool({ connectionString: DATABASE_URL, max: 4 });
+ return new Pool({
+  connectionString: DATABASE_URL,
+  max: 10,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+});
 }
