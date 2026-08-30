@@ -8,8 +8,15 @@ export const usernameSchema = z
 
 export const registerSchema = z.object({
   username: usernameSchema,
-  email: z.string().email(),
+  email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters').max(128),
+  dateOfBirth: z.string().refine((val) => {
+    const dob = new Date(val);
+    if (isNaN(dob.getTime())) return false;
+    const ageLimitDate = new Date();
+    ageLimitDate.setFullYear(ageLimitDate.getFullYear() - 13);
+    return dob <= ageLimitDate;
+  }, 'You must be at least 13 years old'),
 });
 
 export const loginSchema = z.object({
@@ -19,3 +26,4 @@ export const loginSchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+

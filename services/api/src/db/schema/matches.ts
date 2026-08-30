@@ -61,5 +61,7 @@ export const rooms = pgTable("rooms", {
 export const roomMembers = pgTable("room_members", {
   roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  ready: boolean("ready").default(false).notNull(),
   joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
 });
+

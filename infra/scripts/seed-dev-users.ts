@@ -140,10 +140,33 @@ async function main(): Promise<void> {
       console.log(`seeded user "${username}"`);
     }
 
+    // Seed quest definitions
+    const QUESTS = [
+      { title: "Solve 1 Problem", description: "Solve any problem in practice mode", xpReward: 100, targetType: "solve", targetValue: 1 },
+      { title: "Solve 3 Problems", description: "Complete 3 coding tasks", xpReward: 250, targetType: "solve", targetValue: 3 },
+      { title: "Win a Battle", description: "Defeat an opponent in a room match", xpReward: 300, targetType: "win", targetValue: 1 }
+    ];
+
+    for (const q of QUESTS) {
+      await client.query(
+        `
+          INSERT INTO quest_definitions (title, description, xp_reward, target_type, target_value)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT (lower(title)) DO UPDATE SET
+            description = EXCLUDED.description,
+            xp_reward = EXCLUDED.xp_reward,
+            target_type = EXCLUDED.target_type,
+            target_value = EXCLUDED.target_value
+        `,
+        [q.title, q.description, q.xpReward, q.targetType, q.targetValue]
+      );
+      console.log(`seeded quest definition "${q.title}"`);
+    }
+
     await client.query('COMMIT');
 
     console.log(
-      `\nSuccessfully seeded ${USERS.length} user(s).`,
+      `\nSuccessfully seeded ${USERS.length} user(s) and ${QUESTS.length} quest definition(s).`,
     );
   } catch (error) {
     await client.query('ROLLBACK');

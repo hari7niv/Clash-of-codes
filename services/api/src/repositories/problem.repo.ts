@@ -1,25 +1,38 @@
 import { db } from "../db/client.js";
 import { problems, testCases } from "../db/schema/problems.js";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 
 export const getProblems = async (options: { topic?: string; difficulty?: string; page?: number; limit?: number }) => {
   const page = options.page || 1;
   const limit = options.limit || 20;
   const offset = (page - 1) * limit;
 
-  // Simple query. Filter by tags or difficulty.
-  // Drizzle allows filtering using where clauses. We will build dynamic queries.
+  // Build dynamic conditions
+  const conditions = [] as any[];
+  if (options.difficulty) {
+    conditions.push(eq(problems.difficulty, options.difficulty.toLowerCase()));
+  }
+  if (options.topic) {
+    // Assuming tags is an array column; use PostgreSQL array contains operator
+    conditions.push(sql`${problems.tags} @> ARRAY[${options.topic}]`);
+  }
+
+  // Base query
   let query = db.select().from(problems);
-  
-  // Note: For fully scalable custom filters we would chain .where(). But Drizzle lets us write simpler:
-  // If we just want a simple fetch for the list view:
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions)) as any;
+  }
+
+  // Fetch paginated items
   const items = await query.limit(limit).offset(offset);
-  
-  // Get total count
-  const countResult = await db.execute<{ count: number }>(
-    `SELECT COUNT(*)::int as count FROM problems`
-  );
-  const count = countResult.rows[0]?.count || 0;
+
+  // Count total with same filters
+  const countResult = await db
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(problems)
+    .where(and(...conditions))
+    .limit(1);
+  const total = countResult[0]?.count ?? 0;
 
   return {
     items: items.map(p => ({
@@ -31,7 +44,7 @@ export const getProblems = async (options: { topic?: string; difficulty?: string
     })),
     page,
     limit,
-    total: count
+    total
   };
 };
 
@@ -60,15 +73,19 @@ export const getProblemById = async (id: string) => {
       output: tc.expectedOutput
     })),
     starterCode: {
-      typescript: `function solve(): void {\n  // write code here\n}`,
-      javascript: `function solve() {\n  // write code here\n}`
+      python: `def solve():\n    # write code here\n    pass`,
+      java: `public class Solution {\n    public static void solve() {\n        // write code here\n    }\n}`,
+      cpp: `#include <iostream>\nusing namespace std;\n\nvoid solve() {\n    // write code here\n}`,
+      javascript: `function solve() {\n  // write code here\n}`,
+      typescript: `function solve(): void {\n  // write code here\n}`
     }
   };
 };
 
 export const getDailyProblem = async () => {
-  // Return the first problem as daily for simplicity, or random
-  const [problem] = await db.select().from(problems).limit(1);
-  if (!problem) return null;
+  const allProblems = await db.select().from(problems);
+  if (allProblems.length === 0) return null;
+  const dayIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+  const problem = allProblems[dayIndex % allProblems.length];
   return getProblemById(problem.id);
 };

@@ -1,6 +1,11 @@
 import { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { createRoom, getRoomByCode, joinRoom, leaveRoom } from "../../repositories/room.repo.js";
+import { db } from "../../db/client.js";
+import { rooms, roomMembers, matches } from "../../db/schema/matches.js";
+import { problems } from "../../db/schema/problems.js";
+import { eq, and } from "drizzle-orm";
+
 
 const createRoomSchema = z.object({
   roomName: z.string(),

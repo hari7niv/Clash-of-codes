@@ -9,7 +9,7 @@ import { Link, useLocation } from "wouter";
 
 import { api } from "@/lib/api";
 
-type Errors = { username?: string; email?: string; password?: string; confirm?: string; general?: string };
+type Errors = { username?: string; email?: string; password?: string; confirm?: string; dateOfBirth?: string; general?: string };
 const validEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 export default function Signup() {
@@ -18,6 +18,7 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [errors, setErrors] = useState<Errors>({});
   
   const submit = async (event: FormEvent) => {
@@ -31,12 +32,21 @@ export default function Signup() {
     else if (password.length < 8) next.password = "Use at least 8 characters.";
     if (!confirm) next.confirm = "Confirm your password.";
     else if (password !== confirm) next.confirm = "Passwords do not match.";
+    if (!dateOfBirth) next.dateOfBirth = "Date of birth is required.";
+    else {
+      const dob = new Date(dateOfBirth);
+      const ageLimit = new Date();
+      ageLimit.setFullYear(ageLimit.getFullYear() - 13);
+      if (dob > ageLimit) {
+        next.dateOfBirth = "You must be at least 13 years old.";
+      }
+    }
     setErrors(next);
     
     if (Object.keys(next).length > 0) return;
     
     try {
-      const response = await api.post("/auth/signup", { username, email, password });
+      const response = await api.post("/auth/signup", { username, email, password, dateOfBirth });
       if (response.data?.accessToken) {
         localStorage.setItem("token", response.data.accessToken);
         setLocation("/app");
@@ -77,6 +87,10 @@ export default function Signup() {
           <label>Email address
             <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" aria-invalid={Boolean(errors.email)} className={errors.email ? "is-invalid" : ""} placeholder="you@example.com" />
             {errors.email && <span className="field-error">{errors.email}</span>}
+          </label>
+          <label>Date of birth
+            <input value={dateOfBirth} onChange={(event) => setDateOfBirth(event.target.value)} type="date" aria-invalid={Boolean(errors.dateOfBirth)} className={errors.dateOfBirth ? "is-invalid" : ""} />
+            {errors.dateOfBirth && <span className="field-error">{errors.dateOfBirth}</span>}
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label>Password

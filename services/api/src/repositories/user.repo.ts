@@ -1,6 +1,6 @@
 import { db } from "../db/client.js";
 import { users, friendships } from "../db/schema/users.js";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, or, sql } from "drizzle-orm";
 import { tierForRating } from "@clashofcode/shared";
 
 // Helper to map DB user properties to safe public/player frontend objects
@@ -40,32 +40,41 @@ export const toPlayerProfile = (user: typeof users.$inferSelect) => {
   };
 };
 
-export const createUser = async (data: { username: string; email: string; passwordHash: string }) => {
-  const [newUser] = await db.insert(users).values({
-    username: data.username,
-    email: data.email,
-    passwordHash: data.passwordHash,
-  }).returning();
-
-  return newUser;
-};
-
-export const getUserByEmail = async (email: string) => {
-  const [user] = await db.select().from(users).where(eq(users.email, email));
-  return user || null;
-};
-
-export const getUserById = async (id: string) => {
+export const lookupUser = async (id: string) => {
   const [user] = await db.select().from(users).where(eq(users.id, id));
   return user || null;
 };
 
-export const getUserByUsername = async (username: string) => {
+export const lookupUserByUsername = async (username: string) => {
   const [user] = await db.select().from(users).where(eq(users.username, username));
   return user || null;
 };
 
-export const updateUser = async (id: string, data: { username?: string }) => {
+export const lookupUserByEmail = async (email: string) => {
+  const [user] = await db.select().from(users).where(eq(users.email, email));
+  return user || null;
+};
+
+export const createUser = async (data: {
+  username: string;
+  email: string;
+  passwordHash: string;
+  dateOfBirth?: string;
+}) => {
+  const [user] = await db.insert(users).values({
+    username: data.username,
+    email: data.email,
+    passwordHash: data.passwordHash,
+    dateOfBirth: data.dateOfBirth,
+  }).returning();
+  
+  return user || null;
+};
+
+export const updateUser = async (id: string, data: {
+  username?: string;
+  email?: string;
+}) => {
   const [updatedUser] = await db.update(users).set({
     username: data.username,
   }).where(eq(users.id, id)).returning();
@@ -85,16 +94,17 @@ export const getFriends = async (userId: string) => {
     .from(friendships)
     .innerJoin(
       users,
-      // If the friendship record user_id matches us, join on the friend_id user record.
-      // If the friendship record friend_id matches us, join on the user_id user record.
       eq(
         users.id,
-        db.raw(`CASE WHEN friendships.user_id = '${userId}'::uuid THEN friendships.friend_id ELSE friendships.user_id END`)
+        sql`CASE WHEN ${friendships.userId} = ${userId}::uuid THEN ${friendships.friendId} ELSE ${friendships.userId} END`
       )
     )
     .where(
       and(
-        db.raw(`(friendships.user_id = '${userId}'::uuid OR friendships.friend_id = '${userId}'::uuid)`),
+        or(
+          eq(friendships.userId, userId),
+          eq(friendships.friendId, userId)
+        ),
         eq(friendships.status, "accepted")
       )
     );
@@ -105,7 +115,7 @@ export const getFriends = async (userId: string) => {
     return {
       handle: uf.username,
       initials: uf.username.substring(0, 2).toUpperCase(),
-      state: "Online" as const, // Simulating presence
+      state: "Offline" as const, // Simulating presence
       activity: "Idle",
       rank: tier.name as any,
       rating: ratingInt
@@ -126,10 +136,10 @@ export const getLeaderboard = async (options: { page?: number; limit?: number })
     .limit(limit)
     .offset(offset);
 
-  const countResult = await db.execute<{ count: number }>(
-    `SELECT COUNT(*)::int as count FROM users`
+  const countResult = await db.execute(
+    sql`SELECT COUNT(*)::int as count FROM ${users}`
   );
-  const count = countResult.rows[0]?.count || 0;
+  const count = (countResult.rows[0] as any)?.count || 0;
 
   return {
     items: resultUsers.map((u, i) => {
@@ -152,3 +162,8 @@ export const getLeaderboard = async (options: { page?: number; limit?: number })
     total: count
   };
 };
+
+export const getUserById = lookupUser;
+export const getUserByEmail = lookupUserByEmail;
+export const getUserByUsername = lookupUserByUsername;
+
