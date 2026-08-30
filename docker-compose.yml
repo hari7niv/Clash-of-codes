@@ -11,8 +11,9 @@ services:
       POSTGRES_USER: clash
       POSTGRES_PASSWORD: clash
       POSTGRES_DB: clashofcode
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
-      - "5432:5432"
+      - "5440:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

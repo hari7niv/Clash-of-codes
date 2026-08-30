@@ -3,11 +3,30 @@
  * now amplified with compact control panels, tactile room-code modules, and participant-slot signals.
  */
 import { MatchLine, Pill } from "@/components/ArenaPrimitives";
-import { battleTypes, topics } from "@/data/mockData";
 import { Check, Copy, Crown, Link2, Plus, Share2, ShieldCheck, Users } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
+import { useRoomData } from "@/hooks/useRoomData";
+
+const battleTypes = [
+  { id: "blitz", name: "Blitz", time: "05:00", description: "Fast-paced combat. Ideal for syntax speed and simple algorithmic recall." },
+  { id: "standard", name: "Standard", time: "10:00", description: "The core arena format. Balances execution speed with thoughtful optimization." },
+  { id: "deep", name: "Deep Battle", time: "20:00", description: "Complex problem space. Requires architectural thinking and multiple passes." },
+];
+
+const topics = [
+  "Random",
+  "Arrays & Hashing",
+  "Two Pointers",
+  "Sliding Window",
+  "Stack",
+  "Binary Search",
+  "Linked List",
+  "Trees",
+  "Graphs",
+  "Dynamic Programming",
+];
 
 const roomCode = "CLO-7M2K";
 const guestLink = `${window.location.origin}/join/${roomCode}`;

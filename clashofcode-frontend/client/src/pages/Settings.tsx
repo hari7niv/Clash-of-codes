@@ -3,7 +3,6 @@
  * navigation column and restrained configuration panels, adapted from the supplied reference.
  */
 import { Avatar } from "@/components/ArenaPrimitives";
-import { player } from "@/data/mockData";
 import {
   BellRing,
   Check,
@@ -18,8 +17,9 @@ import {
   Swords,
   UserRound,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useState, useEffect } from "react";
 import { toast } from "sonner";
+import { useSettingsData } from "@/hooks/useSettingsData";
 
 type SettingsTab = "profile" | "match" | "interface" | "notifications" | "account";
 
@@ -59,14 +59,21 @@ function PanelHeader({ kicker, title, copy, status, icon: Icon }: { kicker: stri
 }
 
 export default function Settings() {
+  const { player, loading, updateProfile } = useSettingsData();
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
   const [search, setSearch] = useState("");
   const [deskMode, setDeskMode] = useState<"standard" | "compact">("standard");
   const [profile, setProfile] = useState({
-    handle: player.handle,
+    handle: "Loading...",
     bio: "Working through hard problems, one clean solution at a time.",
     location: "Bengaluru, India",
   });
+  
+  useEffect(() => {
+    if (player) {
+      setProfile(prev => ({ ...prev, handle: player.handle }));
+    }
+  }, [player]);
   const [preferences, setPreferences] = useState({
     ratingVisible: true,
     activityVisible: true,
@@ -87,15 +94,15 @@ export default function Settings() {
     <>
       <PanelHeader kicker="Identity channel / season 03" title="Public profile" copy="Define the player signal shown in rooms, bracket cards, and post-battle history." status="Public" icon={Eye} />
       <div className="settings-profile-intro">
-        <Avatar initials={player.initials} tone="red" size="lg" />
+        <Avatar initials={player?.initials || "ME"} tone="red" size="lg" />
         <div className="settings-player-name">
-          <p className="font-display text-xl font-bold tracking-[-.05em]">{player.handle}</p>
-          <p className="mt-1 font-mono text-[10px] uppercase tracking-[.11em] text-[#a7aaaf]">{player.rating} rating / {player.rank}</p>
+          <p className="font-display text-xl font-bold tracking-[-.05em]">{player?.handle || "Loading..."}</p>
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-[.11em] text-[#a7aaaf]">{player?.rating || 1500} rating / {player?.rank || "Bronze"}</p>
           <button type="button" onClick={() => toast("Avatar changes are ready for backend storage")} className="settings-inline-action">Change identity mark</button>
         </div>
         <div className="settings-profile-statblocks" aria-label="Player identity signals">
-          <div><small>Rating</small><strong>{player.rating}</strong></div>
-          <div><small>Rank</small><strong>PLAT</strong></div>
+          <div><small>Rating</small><strong>{player?.rating || 1500}</strong></div>
+          <div><small>Rank</small><strong>{player?.rank?.toUpperCase() || "BRONZE"}</strong></div>
           <div><small>Signal</small><strong>OPEN</strong></div>
         </div>
       </div>
@@ -179,7 +186,7 @@ export default function Settings() {
         </div>
         <div className="settings-head-intel">
           <div className="settings-context"><span>{activeMeta.label}</span><ChevronRight className="h-4 w-4" /><span>{activeMeta.note}</span></div>
-          <div className="settings-ready-strip"><span><i /> Arena live</span><strong>03</strong><small>Season</small><strong>{player.rating}</strong><small>Rating</small></div>
+          <div className="settings-ready-strip"><span><i /> Arena live</span><strong>03</strong><small>Season</small><strong>{player?.rating || 1500}</strong><small>Rating</small></div>
         </div>
       </header>
       <div className="settings-layout">

@@ -3,11 +3,20 @@
  * with editorial asymmetry, compact data blocks, and a visible match line.
  */
 import { Avatar, IconLabel, MatchLine, Meter, Pill, RankBadge, StatBlock, Streak, Trend } from "@/components/ArenaPrimitives";
-import { mastery, player, quests, recentBattles, recommendations } from "@/data/mockData";
 import { ArrowUpRight, Check, ChevronRight, Crosshair, Dices, Link2, Medal, Sparkles, Swords, Target, Timer, Trophy } from "lucide-react";
 import { Link } from "wouter";
+import { useDashboardData } from "@/hooks/useDashboardData";
 
 export default function Dashboard() {
+  const { player, quests, recentBattles, mastery, recommendations, loading, error } = useDashboardData();
+
+  if (loading) {
+    return <div className="page-wrap enter-up p-8 flex justify-center text-[#848792]">Loading dashboard...</div>;
+  }
+  if (error || !player) {
+    return <div className="page-wrap enter-up p-8 flex justify-center text-[#e48b87]">Error loading dashboard.</div>;
+  }
+
   return <div className="page-wrap enter-up">
     <section style={{ width: "100%", maxWidth: "none" }} className="relative w-full min-h-[380px] overflow-hidden border border-white/10 bg-[#191a20] p-5 sm:p-8 lg:p-9">
       <div className="noise absolute inset-0 bg-cover bg-center opacity-[.54]" style={{ backgroundImage: "linear-gradient(90deg, #17181d 0%, rgba(23,24,29,.92) 37%, rgba(23,24,29,.22) 100%), url('/manus-storage/codeclash-hero-arena_d5f624c0.jpg')" }} />
