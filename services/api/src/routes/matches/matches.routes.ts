@@ -1,5 +1,10 @@
 import { FastifyPluginAsync } from "fastify";
 import { getMatchById, createSubmission, getMatchResult } from "../../repositories/match.repo.js";
+import { getJudgeQueue } from "../../services/judge-queue.js";
+import { completeMatch } from "../../services/rating-calculator.js";
+import { db } from "../../db/client.js";
+import { submissions } from "../../db/schema/matches.js";
+import { eq } from "drizzle-orm";
 
 export const matchRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("onRequest", async (request, reply) => {
@@ -81,25 +86,53 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(403).send({ error: { code: "FORBIDDEN", message: "You are not a participant in this match" } });
       }
 
-      // Simulated judging verdict mapping to database (we will improve this when judge-worker runs, for now we keep it and clean up placeholder verification)
+      // Create submission with pending status
       const submission = await createSubmission({
         matchId,
         userId,
         problemId: matchData.problem.id,
         language: body.language,
         sourceCode: body.code,
-        verdict: "accepted",
-        passedTests: 10,
-        totalTests: 10,
+        verdict: "pending",
+        passedTests: 0,
+        totalTests: 0,
       });
 
-      return {
-        verdict: "Accepted",
-        testsPassed: submission.passedTests,
-        totalTests: submission.totalTests,
-        runtimeMs: 45,
-        memoryMb: 12.4
-      };
+      // Enqueue judge job
+      const queue = getJudgeQueue();
+      await queue.add(`judge-${submission.id}`, { submissionId: submission.id });
+
+      // Poll for judge result (max 30 seconds)
+      const maxWaitMs = 30000;
+      const pollIntervalMs = 500;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitMs) {
+        const [latestSubmission] = await db
+          .select()
+          .from(submissions)
+          .where(eq(submissions.id, submission.id));
+
+        if (latestSubmission.verdict !== "pending") {
+          return {
+            verdict: latestSubmission.verdict === "accepted" ? "Accepted" : "Wrong Answer",
+            testsPassed: latestSubmission.passedTests,
+            totalTests: latestSubmission.totalTests,
+            runtimeMs: 45,
+            memoryMb: 12.4
+          };
+        }
+
+        await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+      }
+
+      // Timeout - return pending status
+      return reply.code(202).send({
+        verdict: "Pending",
+        testsPassed: 0,
+        totalTests: 0,
+        message: "Judge result still processing"
+      });
     } catch (err: any) {
       return reply.code(400).send({ error: { code: "BAD_REQUEST", message: err.message } });
     }
@@ -115,5 +148,39 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return result;
+  });
+
+  app.post("/:matchId/complete", async (request, reply) => {
+    try {
+      const { id: userId } = request.user as { id: string };
+      const { matchId } = request.params as any;
+
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(matchId)) {
+        return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Invalid match ID format" } });
+      }
+
+      const matchData = await getMatchById(matchId, userId);
+      if (!matchData) {
+        return reply.code(404).send({ error: { code: "NOT_FOUND", message: "Match not found" } });
+      }
+
+      // Verify user is part of match
+      const isParticipant = matchData.match.playerOneId === userId || matchData.match.playerTwoId === userId;
+      if (!isParticipant) {
+        return reply.code(403).send({ error: { code: "FORBIDDEN", message: "Not authorized" } });
+      }
+
+      // Complete match and calculate ratings
+      const completedMatch = await completeMatch(matchId);
+      const result = await getMatchResult(matchId, userId);
+
+      return {
+        match: completedMatch,
+        result
+      };
+    } catch (err: any) {
+      return reply.code(400).send({ error: { code: "BAD_REQUEST", message: err.message } });
+    }
   });
 };

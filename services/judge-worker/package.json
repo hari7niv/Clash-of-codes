@@ -1,5 +1,5 @@
 {
-  "name": "@clashofcode/api",
+  "name": "@clashofcode/judge-worker",
   "version": "0.1.0",
   "private": true,
   "main": "src/index.ts",
@@ -13,25 +13,18 @@
   },
   "dependencies": {
     "@clashofcode/shared": "workspace:*",
-    "@fastify/cors": "^9.0.1",
-    "@fastify/jwt": "^8.0.1",
-    "@fastify/rate-limit": "^9.1.0",
-    "bcryptjs": "^2.4.3",
+    "axios": "^1.7.7",
     "bullmq": "^5.14.0",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.45.2",
-    "fastify": "^4.27.0",
-    "fastify-plugin": "^4.5.1",
     "pg": "^8.13.1",
     "postgres": "^3.4.9",
     "uuid": "^14.0.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
-    "@types/uuid": "^11.0.0",
     "drizzle-kit": "^0.31.10",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
