@@ -1,10 +1,34 @@
 import { computeMatchRatings } from "@clashofcode/shared";
-import { db } from "../db/client.js";
+import { db, pool } from "../db/client.js";
 import { users, users as usersTable } from "../db/schema/users.js";
 import { matches, submissions, ratingsHistory } from "../db/schema/matches.js";
 import { eq, and } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import * as usersSchema from "../db/schema/users.js";
+import * as problemsSchema from "../db/schema/problems.js";
+import * as matchesSchema from "../db/schema/matches.js";
 
+// FIX P3.5: Wrap completeMatch in a Drizzle transaction for atomic updates
 export const completeMatch = async (matchId: string) => {
+  // Get a dedicated connection for this transaction
+  const connection = await pool.connect();
+  const txDb = drizzle(connection, {
+    schema: { ...usersSchema, ...problemsSchema, ...matchesSchema }
+  });
+
+  try {
+    // Start transaction
+    const result = await txDb.transaction(async (tx) => {
+      return await completMatchInternal(matchId, tx as any);
+    });
+    return result;
+  } finally {
+    connection.release();
+  }
+};
+
+// Internal function to execute within transaction
+const completMatchInternal = async (matchId: string, tx: any) => {
   // Fetch match data
   const [match] = await db.select().from(matches).where(eq(matches.id, matchId));
   if (!match) {
@@ -16,7 +40,7 @@ export const completeMatch = async (matchId: string) => {
   }
 
   // Fetch all submissions for this match
-  const matchSubmissions = await db
+  const matchSubmissions = await tx
     .select()
     .from(submissions)
     .where(eq(submissions.matchId, matchId));
@@ -58,7 +82,7 @@ export const completeMatch = async (matchId: string) => {
   }
 
   // Fetch player data
-  const [player1] = await db.select().from(users).where(eq(users.id, match.playerOneId));
+  const [player1] = await tx.select().from(users).where(eq(users.id, match.playerOneId));
 
   if (!player1) {
     throw new Error("Player 1 not found");
@@ -67,7 +91,7 @@ export const completeMatch = async (matchId: string) => {
   // Handle single player match (vs practice/AI)
   if (!match.playerTwoId) {
     // Update match status
-    await db
+    await tx
       .update(matches)
       .set({
         status: "completed",
@@ -77,7 +101,7 @@ export const completeMatch = async (matchId: string) => {
       .where(eq(matches.id, matchId));
 
     // Update player in database
-    await db
+    await tx
       .update(users)
       .set({
         gamesPlayed: player1.gamesPlayed + 1,
@@ -91,7 +115,7 @@ export const completeMatch = async (matchId: string) => {
   }
 
   // Two player match
-  const [player2] = await db.select().from(users).where(eq(users.id, match.playerTwoId));
+  const [player2] = await tx.select().from(users).where(eq(users.id, match.playerTwoId));
 
   if (!player2) {
     throw new Error("Player 2 not found");
@@ -113,7 +137,7 @@ export const completeMatch = async (matchId: string) => {
   );
 
   // Update match status
-  await db
+  await tx
     .update(matches)
     .set({
       status: "completed",
@@ -123,7 +147,7 @@ export const completeMatch = async (matchId: string) => {
     .where(eq(matches.id, matchId));
 
   // Update players in database
-  await db
+  await tx
     .update(users)
     .set({
       rating: ratingResult.playerOne.rating,
@@ -136,7 +160,7 @@ export const completeMatch = async (matchId: string) => {
     })
     .where(eq(users.id, match.playerOneId));
 
-  await db
+  await tx
     .update(users)
     .set({
       rating: ratingResult.playerTwo.rating,
@@ -150,7 +174,7 @@ export const completeMatch = async (matchId: string) => {
     .where(eq(users.id, match.playerTwoId));
 
   // Record rating changes in history
-  await db.insert(ratingsHistory).values([
+  await tx.insert(ratingsHistory).values([
     {
       userId: match.playerOneId,
       matchId,
