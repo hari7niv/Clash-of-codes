@@ -136,6 +136,19 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
     const languageId = getJudge0LanguageId(submission.language);
     const testResults: SubmissionTestResult[] = [];
     let passedCount = 0;
+    
+    // FIX P4: Track highest-priority verdict instead of collapsing all to "wrong_answer"
+    // Priority: Compilation Error > Runtime Error > TLE > MLE > Wrong Answer
+    let highestPriorityVerdict: Verdict | null = null;
+    const VERDICT_PRIORITY: Record<Verdict, number> = {
+      "compilation_error": 5,
+      "runtime_error": 4,
+      "time_limit_exceeded": 3,
+      "memory_limit_exceeded": 2,
+      "wrong_answer": 1,
+      "accepted": 0, // Lowest priority (not an error)
+      "internal_error": 6, // Highest priority
+    };
 
     // Judge each test case
     for (let i = 0; i < testCases.length; i++) {
@@ -158,6 +171,11 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
         // Map verdict
         const verdict = mapJudge0StatusToVerdict(result.status.id, result.stderr, result.compile_output);
 
+        // Track highest priority verdict (P4 fix: don't collapse to wrong_answer)
+        if (!highestPriorityVerdict || VERDICT_PRIORITY[verdict] > VERDICT_PRIORITY[highestPriorityVerdict]) {
+          highestPriorityVerdict = verdict;
+        }
+
         // For passed verdicts, check output
         let testPassed = false;
         let details = result.status.description;
@@ -169,6 +187,11 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
           );
           testPassed = comparison.passed;
           details = comparison.details.join(", ");
+          
+          // If output comparison fails, set to wrong_answer
+          if (!testPassed) {
+            highestPriorityVerdict = "wrong_answer";
+          }
         }
 
         if (testPassed) {
@@ -181,7 +204,7 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
           details,
         });
 
-        console.log(`[Judge Worker] Test ${i + 1}: ${testPassed ? "PASS" : "FAIL"} - ${details}`);
+        console.log(`[Judge Worker] Test ${i + 1}: ${testPassed ? "PASS" : "FAIL"} - ${details} (${verdict})`);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.error(`[Judge Worker] Test ${i + 1} error: ${errorMsg}`);
@@ -193,8 +216,10 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
       }
     }
 
-    // Determine final verdict
-    const finalVerdict: Verdict = passedCount === testCases.length ? "accepted" : "wrong_answer";
+    // Determine final verdict (FIX P4: use highest priority verdict, not just wrong_answer)
+    const finalVerdict: Verdict = passedCount === testCases.length 
+      ? "accepted" 
+      : (highestPriorityVerdict || "wrong_answer");
 
     // Update submission in database
     const now = new Date();
