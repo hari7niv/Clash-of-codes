@@ -11,6 +11,7 @@ interface Judge0Submission {
   cpu_time_limit?: number;
   memory_limit?: number;
   wall_time_limit?: number;
+  enable_network?: boolean;
 }
 
 interface Judge0Result {
@@ -36,7 +37,12 @@ export class Judge0Client {
 
   async submit(submission: Judge0Submission): Promise<{ token: string }> {
     try {
-      const response = await axios.post(`${this.baseUrl}/submissions`, submission, {
+      const payload = {
+        enable_network: false,
+        ...submission,
+      };
+
+      const response = await axios.post(`${this.baseUrl}/submissions`, payload, {
         params: {
           base64_encoded: false,
           wait: false, // Don't wait for result, we'll poll

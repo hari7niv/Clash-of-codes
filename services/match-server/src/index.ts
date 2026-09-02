@@ -1,19 +1,33 @@
 import { Server } from "socket.io";
 import { createServer } from "http";
-import Redis from "ioredis";
+import { Redis } from "ioredis";
+import { Queue } from "bullmq";
+import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { v4 as uuidv4 } from "uuid";
 import { listenToMatchQueue } from "./services/queue-listener.js";
 import { MatchHandler } from "./services/match-handler.js";
 import { startMatchmakingLoop } from "./services/matchmaking-loop.js";
 import { checkDbConnection, closeDb, pool } from "./db/client.js";
-import type { ClientToServerEvents, ServerToClientEvents, SocketData, JoinQueuePayload, LeaveQueuePayload, SubmitCodePayload, RequestReconnectPayload } from "@clashofcode/shared";
-import { SOCKET_EVENTS } from "@clashofcode/shared";
+import type {
+  ClientToServerEvents,
+  ServerToClientEvents,
+  SocketData,
+  JoinQueuePayload,
+  LeaveQueuePayload,
+  SubmitCodePayload,
+  RequestReconnectPayload,
+  PublicProblem,
+  PublicUser,
+} from "@clashofcode/shared";
+import { SOCKET_EVENTS, computeMatchRatings } from "@clashofcode/shared";
 
 dotenv.config();
 
-const PORT = parseInt(process.env.PORT || "3000", 10);
+const PORT = parseInt(process.env.PORT || "4100", 10);
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+const JWT_SECRET = process.env.JWT_SECRET || "supersecret-dev-key";
+const JUDGE_QUEUE_NAME = process.env.JUDGE_QUEUE_NAME || "judge_submissions";
 
 const httpServer = createServer();
 const io = new Server<ClientToServerEvents, ServerToClientEvents, {}, SocketData>(
@@ -40,14 +54,46 @@ console.log(`   Port: ${PORT}`);
   try {
     await checkDbConnection();
   } catch (err) {
-    console.error("❌ Failed to initialize database connection");
+    console.error("❌ Failed to initialize database connection:", err);
     process.exit(1);
   }
 })();
 
+// JWT Authentication Middleware: Verify token during handshake
+io.use((socket, next) => {
+  try {
+    const token =
+      socket.handshake.auth?.token ||
+      (socket.handshake.query?.token as string | undefined);
+
+    if (!token) {
+      console.warn(`[Match Server] Connection rejected (no token): ${socket.id}`);
+      return next(new Error("Authentication error: Token required"));
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const userId = decoded.id || decoded.sub;
+
+    if (!userId) {
+      console.warn(`[Match Server] Connection rejected (invalid claims): ${socket.id}`);
+      return next(new Error("Authentication error: Invalid token payload"));
+    }
+
+    socket.data.userId = userId;
+    socket.data.username = decoded.username || "Player";
+    socket.data.rating = decoded.rating || 1500;
+
+    console.log(`[Match Server] 🔑 Authenticated user ${userId} (${socket.data.username}) on socket ${socket.id}`);
+    next();
+  } catch (err: any) {
+    console.warn(`[Match Server] JWT verification failed for ${socket.id}: ${err.message}`);
+    return next(new Error(`Authentication error: ${err.message}`));
+  }
+});
+
 // Socket.io connection handling
 io.on("connection", (socket) => {
-  console.log(`[Match Server] Client connected: ${socket.id}`);
+  console.log(`[Match Server] Client connected: ${socket.id} (User: ${socket.data.userId})`);
 
   /**
    * CANONICAL EVENT: join_queue
@@ -121,7 +167,7 @@ io.on("connection", (socket) => {
    * CANONICAL EVENT: leave_queue
    * Client leaves the matchmaking queue
    */
-  socket.on(SOCKET_EVENTS.LEAVE_QUEUE, async (payload: LeaveQueuePayload) => {
+  socket.on(SOCKET_EVENTS.LEAVE_QUEUE, async (_payload: LeaveQueuePayload) => {
     try {
       const userId = socket.data.userId;
 
@@ -163,7 +209,7 @@ io.on("connection", (socket) => {
    */
   socket.on(SOCKET_EVENTS.SUBMIT_CODE, async (payload: SubmitCodePayload) => {
     try {
-      const { roomId, language, sourceCode } = payload;
+      const { roomId, language, sourceCode, action } = payload;
       const userId = socket.data.userId;
 
       if (!userId) {
@@ -188,42 +234,59 @@ io.on("connection", (socket) => {
         });
       }
 
-      // Create submission in database
       const submissionId = uuidv4();
-      const now = Date.now();
+      const testMode = action === "run" ? "sample" : "full";
 
-      try {
-        // TODO: Create submission record and enqueue judge job
-        // This requires integration with judge-worker queue (P2)
-        // For now, just acknowledge the submission
-        matchHandler.registerSubmission(submissionId, userId, roomId);
-
-        console.log(
-          `[Match Server] Player ${userId} submitted code in room ${roomId} (${language})`
-        );
-
-        socket.emit(SOCKET_EVENTS.SUBMISSION_RESULT, {
-          roomId,
+      // 1. Insert submission record into database
+      await pool.query(
+        `INSERT INTO submissions (id, match_id, user_id, problem_id, language, source_code, verdict, passed_tests, total_tests, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', 0, 0, NOW())`,
+        [
           submissionId,
-          verdict: "pending",
-          passedTests: 0,
-          totalTests: 0,
-          runtimeMs: null,
-        });
+          room.matchId,
+          userId,
+          room.problemId,
+          language,
+          sourceCode,
+        ]
+      );
 
-        // TODO: Broadcast opponent_progress to other player when judge completes
-      } catch (err) {
-        console.error("[Match Server] Error creating submission:", err);
-        socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
-          code: "SUBMISSION_FAILED",
-          message: "Failed to create submission",
-        });
-      }
+      // 2. Enqueue job on BullMQ judge queue
+      const judgeQueue = new Queue(JUDGE_QUEUE_NAME, {
+        connection: {
+          url: REDIS_URL,
+        },
+      });
+
+      await judgeQueue.add(`judge-${submissionId}`, {
+        submissionId,
+        testMode,
+        action: action || "submit",
+      });
+
+      await judgeQueue.close();
+
+      // 3. Register submission in matchHandler for verdict bridge routing
+      matchHandler.registerSubmission(submissionId, userId, roomId);
+
+      console.log(
+        `[Match Server] 📥 Submission ${submissionId} created & enqueued for player ${userId} in room ${roomId} (${language}, mode: ${testMode})`
+      );
+
+      // 4. Acknowledge submission to submitter with pending status
+      socket.emit(SOCKET_EVENTS.SUBMISSION_RESULT, {
+        roomId,
+        submissionId,
+        verdict: "pending",
+        passedTests: 0,
+        totalTests: 0,
+        runtimeMs: null,
+      });
     } catch (err: any) {
-      console.error(`[Match Server] Error in submit_code:`, err.message);
+      console.error(`[Match Server] Error in submit_code:`, err);
       socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
         code: "SUBMISSION_FAILED",
-        message: err.message,
+        message: err.message || "Failed to process code submission",
       });
     }
   });
@@ -264,6 +327,14 @@ io.on("connection", (socket) => {
         });
       }
 
+      // Clear any pending grace timer for this user
+      const existingTimer = room.graceTimers.get(userId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+        room.graceTimers.delete(userId);
+        console.log(`[Match Server] ⏱️ Cancelled grace timer for reconnected user ${userId}`);
+      }
+
       // Re-register socket and rejoin room
       matchHandler.registerSocket(userId, socket.id);
       socket.join(`room:${roomId}`);
@@ -271,12 +342,62 @@ io.on("connection", (socket) => {
       // Remove from disconnected players set
       room.disconnectedPlayers.delete(userId);
 
+      // Fetch problem and opponent details for full room snapshot
+      let publicProblem: PublicProblem | null = null;
+      let opponent: PublicUser | null = null;
+
+      const problemRes = await pool.query(
+        "SELECT id, slug, title, statement, difficulty, rating, time_limit_ms, memory_limit_kb, tags FROM problems WHERE id = $1",
+        [room.problemId]
+      );
+      if (problemRes.rows.length > 0) {
+        const p = problemRes.rows[0];
+        const tcRes = await pool.query(
+          "SELECT input, expected_output FROM test_cases WHERE problem_id = $1 AND is_sample = true ORDER BY ordinal ASC",
+          [p.id]
+        );
+        publicProblem = {
+          id: p.id,
+          slug: p.slug,
+          title: p.title,
+          statement: p.statement,
+          difficulty: p.difficulty,
+          timeLimitMs: p.time_limit_ms,
+          memoryLimitKb: p.memory_limit_kb,
+          tags: p.tags || [],
+          sampleTests: tcRes.rows.map((tc: any) => ({
+            input: tc.input,
+            expectedOutput: tc.expected_output,
+          })),
+        };
+      }
+
+      const opponentId = room.playerIds.find((id) => id !== userId);
+      if (opponentId) {
+        const oppRes = await pool.query(
+          "SELECT id, username, rating, games_played, wins, losses, draws FROM users WHERE id = $1",
+          [opponentId]
+        );
+        if (oppRes.rows.length > 0) {
+          const u = oppRes.rows[0];
+          opponent = {
+            id: u.id,
+            username: u.username,
+            rating: Math.round(u.rating),
+            gamesPlayed: u.games_played ?? 0,
+            wins: u.wins ?? 0,
+            losses: u.losses ?? 0,
+            draws: u.draws ?? 0,
+          };
+        }
+      }
+
       // Send full room state
       socket.emit(SOCKET_EVENTS.ROOM_STATE, {
         roomId: room.roomId,
         phase: room.phase,
-        problem: null, // TODO: Fetch from database
-        opponent: null, // TODO: Fetch from database
+        problem: publicProblem,
+        opponent,
         endsAt: room.endsAt,
       });
 
@@ -294,7 +415,7 @@ io.on("connection", (socket) => {
 
   /**
    * Socket disconnect handler
-   * Implements 60-second grace period for reconnection
+   * Implements 60-second grace period with automatic forfeit and rating resolution
    */
   socket.on("disconnect", () => {
     console.log(`[Match Server] Client disconnected: ${socket.id}`);
@@ -304,20 +425,147 @@ io.on("connection", (socket) => {
 
     matchHandler.unregisterSocket(userId);
 
-    // Find all rooms this user is in
     // Check all rooms for this player and mark them as disconnected
     for (const room of Array.from(matchHandler.getRooms().values())) {
       if (room.playerIds.includes(userId)) {
         if (room.phase === "active" || room.phase === "judging") {
-          // Start grace period
           room.disconnectedPlayers.add(userId);
           const gracePeriodMs = 60_000; // 60 seconds
-          const graceTimer = setTimeout(() => {
+
+          const graceTimer = setTimeout(async () => {
             console.log(
-              `[Match Server] Grace period expired for ${userId} in room ${room.roomId}`
+              `[Match Server] ⌛ Grace period expired for ${userId} in room ${room.roomId}`
             );
             room.disconnectedPlayers.delete(userId);
-            // TODO: Mark as forfeited, declare opponent winner
+            room.graceTimers.delete(userId);
+
+            // If match is still active or judging, declare connected opponent the winner
+            if (room.phase === "active" || room.phase === "judging") {
+              const winnerId = room.playerIds.find((id) => id !== userId);
+              await matchHandler.transitionPhase(room.roomId, "completed");
+
+              if (winnerId) {
+                try {
+                  const usersRes = await pool.query(
+                    "SELECT id, rating, rating_deviation, rating_volatility, games_played, wins, losses, draws FROM users WHERE id = ANY($1::uuid[])",
+                    [[userId, winnerId]]
+                  );
+
+                  const loser = usersRes.rows.find((u: any) => u.id === userId);
+                  const winner = usersRes.rows.find((u: any) => u.id === winnerId);
+
+                  if (winner && loser) {
+                    const ratingResult = computeMatchRatings(
+                      {
+                        rating: winner.rating,
+                        deviation: winner.rating_deviation,
+                        volatility: winner.rating_volatility,
+                      },
+                      {
+                        rating: loser.rating,
+                        deviation: loser.rating_deviation,
+                        volatility: loser.rating_volatility,
+                      },
+                      "player_one"
+                    );
+
+                    const now = new Date();
+                    const client = await pool.connect();
+                    try {
+                      await client.query("BEGIN");
+
+                      // Update match status & winner
+                      await client.query(
+                        "UPDATE matches SET status = 'completed', winner_id = $1, ended_at = $2 WHERE id = $3",
+                        [winnerId, now, room.matchId]
+                      );
+
+                      // Update winner stats
+                      await client.query(
+                        `UPDATE users SET rating = $1, rating_deviation = $2, rating_volatility = $3,
+                         games_played = games_played + 1, wins = wins + 1, updated_at = NOW() WHERE id = $4`,
+                        [
+                          ratingResult.playerOne.rating,
+                          ratingResult.playerOne.deviation,
+                          ratingResult.playerOne.volatility,
+                          winnerId,
+                        ]
+                      );
+
+                      // Update loser stats
+                      await client.query(
+                        `UPDATE users SET rating = $1, rating_deviation = $2, rating_volatility = $3,
+                         games_played = games_played + 1, losses = losses + 1, updated_at = NOW() WHERE id = $4`,
+                        [
+                          ratingResult.playerTwo.rating,
+                          ratingResult.playerTwo.deviation,
+                          ratingResult.playerTwo.volatility,
+                          userId,
+                        ]
+                      );
+
+                      // Insert rating history
+                      const winnerDelta = ratingResult.playerOne.rating - winner.rating;
+                      const loserDelta = ratingResult.playerTwo.rating - loser.rating;
+
+                      await client.query(
+                        `INSERT INTO ratings_history (id, user_id, match_id, rating_before, rating_after, rd_before, rd_after, vol_before, vol_after, delta, created_at)
+                         VALUES
+                         (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()),
+                         (gen_random_uuid(), $10, $2, $11, $12, $13, $14, $15, $16, $17, NOW())`,
+                        [
+                          winnerId,
+                          room.matchId,
+                          winner.rating,
+                          ratingResult.playerOne.rating,
+                          winner.rating_deviation,
+                          ratingResult.playerOne.deviation,
+                          winner.rating_volatility,
+                          ratingResult.playerOne.volatility,
+                          winnerDelta,
+                          userId,
+                          loser.rating,
+                          ratingResult.playerTwo.rating,
+                          loser.rating_deviation,
+                          ratingResult.playerTwo.deviation,
+                          loser.rating_volatility,
+                          ratingResult.playerTwo.volatility,
+                          loserDelta,
+                        ]
+                      );
+
+                      await client.query("COMMIT");
+
+                      console.log(
+                        `[Match Server] 🏆 Match ${room.matchId} completed by forfeit. Winner: ${winnerId} (+${Math.round(winnerDelta)})`
+                      );
+
+                      // Emit match_result to winner socket
+                      const winnerSocketId = matchHandler.getSocketForUser(winnerId);
+                      if (winnerSocketId) {
+                        io.to(winnerSocketId).emit(SOCKET_EVENTS.MATCH_RESULT, {
+                          roomId: room.roomId,
+                          matchId: room.matchId,
+                          winnerId,
+                          you: {
+                            ratingBefore: Math.round(winner.rating),
+                            ratingAfter: Math.round(ratingResult.playerOne.rating),
+                            delta: Math.round(winnerDelta),
+                          },
+                        });
+                      }
+                    } catch (dbErr) {
+                      await client.query("ROLLBACK");
+                      console.error("[Match Server] Error persisting forfeit resolution:", dbErr);
+                    } finally {
+                      client.release();
+                    }
+                  }
+                } catch (forfeitErr) {
+                  console.error("[Match Server] Error in forfeit resolution:", forfeitErr);
+                }
+              }
+            }
           }, gracePeriodMs);
 
           room.graceTimers.set(userId, graceTimer);
@@ -341,11 +589,10 @@ io.on("connection", (socket) => {
 })();
 
 // Start matchmaking loop
+let cleanupMatchmaking: (() => void) | null = null;
 (async () => {
   try {
-    const cleanupMatchmaking = await startMatchmakingLoop(redis, io, matchHandler);
-    // Store for graceful shutdown
-    (global as any).cleanupMatchmaking = cleanupMatchmaking;
+    cleanupMatchmaking = await startMatchmakingLoop(redis, io, matchHandler);
     console.log("🎯 [Match Server] Matchmaking loop started");
   } catch (err) {
     console.error("❌ Failed to start matchmaking loop:", err);
@@ -358,84 +605,54 @@ const timerInterval = setInterval(() => {
   const now = Date.now();
 
   for (const room of Array.from(matchHandler.getRooms().values())) {
-    // Only broadcast timer if match is active and not completed
     if (room.phase !== "active" || room.endsAt === null) {
       continue;
     }
 
     const timeRemaining = Math.max(0, room.endsAt - now);
 
-    // Broadcast to all players in room
     io.to(`room:${room.roomId}`).emit("timer_sync" as any, {
       roomId: room.roomId,
       timeRemainingMs: timeRemaining,
       serverTime: now,
     });
 
-    // If time is up, transition room to judging phase
     if (timeRemaining <= 0 && room.phase === "active") {
       matchHandler.transitionPhase(room.roomId, "judging").catch((err) => {
         console.error(`[Match Server] Error transitioning room ${room.roomId}:`, err);
       });
     }
   }
-}, 100); // Broadcast every 100ms for smooth client timers
+}, 100);
 
-// Start server
-httpServer.listen(PORT, () => {
-  console.log(`✅ Match Server listening on port ${PORT}`);
-});
-
-// Graceful shutdown
-process.on("SIGINT", async () => {
-  console.log("\n[Match Server] SIGINT received, shutting down gracefully...");
-
-  // Stop matchmaking loop
-  if ((global as any).cleanupMatchmaking) {
-    (global as any).cleanupMatchmaking();
-  }
-
-  // Stop timer broadcasts
-  clearInterval(timerInterval);
-
-  await closeDb();
-  redis.disconnect();
-  io.close();
-  httpServer.close(() => {
-    console.log("[Match Server] ✅ Shutdown complete");
-    process.exit(0);
-  });
-});
-
-// Graceful shutdown
-process.on("SIGTERM", () => {
-  console.log("[Match Server] SIGTERM received, shutting down gracefully...");
-
-  // Stop matchmaking loop
-  if ((global as any).cleanupMatchmaking) {
-    (global as any).cleanupMatchmaking();
-  }
-
-  // Stop timer broadcasts
-  clearInterval(timerInterval);
-
-  io.close();
-  httpServer.close(() => {
-    console.log("[Match Server] ✅ Closed");
-    process.exit(0);
-  });
-});
-
-process.on("SIGINT", () => {
-  console.log("[Match Server] SIGINT received, shutting down gracefully...");
-  io.close();
-  httpServer.close(() => {
-    console.log("[Match Server] Closed");
-    process.exit(0);
-  });
-});
-
-// Start server
+// Start server (single listen call)
 httpServer.listen(PORT, () => {
   console.log(`✅ [Match Server] Listening on port ${PORT}`);
 });
+
+// Graceful shutdown
+const shutdown = async () => {
+  console.log("\n[Match Server] Shutting down gracefully...");
+
+  if (cleanupMatchmaking) {
+    cleanupMatchmaking();
+  }
+
+  clearInterval(timerInterval);
+
+  try {
+    await closeDb();
+    redis.disconnect();
+    io.close();
+    httpServer.close(() => {
+      console.log("[Match Server] ✅ Shutdown complete");
+      process.exit(0);
+    });
+  } catch (err) {
+    console.error("[Match Server] Error during shutdown:", err);
+    process.exit(1);
+  }
+};
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

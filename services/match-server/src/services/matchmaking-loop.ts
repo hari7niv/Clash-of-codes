@@ -9,12 +9,12 @@
  * 4. Emit match_found events to both players via Socket.io
  */
 
-import type Redis from "ioredis";
+import { Redis } from "ioredis";
 import type { Server } from "socket.io";
 import { v4 as uuidv4 } from "uuid";
 import { pool } from "../db/client.js";
 import type { MatchHandler } from "./match-handler.js";
-import type { ClientToServerEvents, ServerToClientEvents, SocketData, MatchFoundPayload } from "@clashofcode/shared";
+import type { ClientToServerEvents, ServerToClientEvents, SocketData, MatchFoundPayload, PublicProblem, PublicUser } from "@clashofcode/shared";
 import { SOCKET_EVENTS } from "@clashofcode/shared";
 
 const QUEUE_LOOP_INTERVAL_MS = 2_000; // Check queue every 2 seconds
@@ -36,9 +36,6 @@ export async function startMatchmakingLoop(
   io: Server<ClientToServerEvents, ServerToClientEvents, {}, SocketData>,
   matchHandler: MatchHandler
 ): Promise<() => void> {
-  // Track matched pairs within this interval to avoid double-matching
-  let lastRunTime = Date.now();
-
   const intervalId = setInterval(async () => {
     try {
       await runMatchmakingCycle(redis, io, matchHandler, "ranked");
@@ -115,39 +112,110 @@ async function runMatchmakingCycle(
             : closest
         );
 
-        // Create match
+        // Create match IDs
         const roomId = uuidv4();
         const matchId = uuidv4();
 
         try {
-          // Fetch full user data for both players (for PublicUser in payload)
+          // Fetch full user data for both players
           const result = await pool.query(
-            "SELECT id, username, rating FROM users WHERE id = ANY($1::uuid[])",
+            "SELECT id, username, rating, games_played, wins, losses, draws FROM users WHERE id = ANY($1::uuid[])",
             [[player1.userId, player2.userId]]
           );
 
-          const users = result.rows as Array<{
-            id: string;
-            username: string;
-            rating: number;
-          }>;
-          const user1 = users.find((u) => u.id === player1.userId);
-          const user2 = users.find((u) => u.id === player2.userId);
+          const users = result.rows;
+          const user1Row = users.find((u: any) => u.id === player1.userId);
+          const user2Row = users.find((u: any) => u.id === player2.userId);
 
-          if (!user1 || !user2) {
+          if (!user1Row || !user2Row) {
             console.warn(
               "[Matchmaking] Could not find user data for pairing"
             );
             continue;
           }
 
-          // Create room
-          const room = await matchHandler.createRoom(
+          const toPublicUser = (u: any): PublicUser => ({
+            id: u.id,
+            username: u.username,
+            rating: Math.round(u.rating),
+            gamesPlayed: u.games_played ?? 0,
+            wins: u.wins ?? 0,
+            losses: u.losses ?? 0,
+            draws: u.draws ?? 0,
+          });
+
+          const user1 = toPublicUser(user1Row);
+          const user2 = toPublicUser(user2Row);
+
+          // Fetch a real problem from database
+          const problemResult = await pool.query(
+            "SELECT id, slug, title, statement, difficulty, rating, time_limit_ms, memory_limit_kb, tags FROM problems ORDER BY RANDOM() LIMIT 1"
+          );
+          const problemRow = problemResult.rows[0];
+
+          let sampleTests: Array<{ input: string; expectedOutput: string }> = [];
+          if (problemRow) {
+            const testCasesResult = await pool.query(
+              "SELECT input, expected_output FROM test_cases WHERE problem_id = $1 AND is_sample = true ORDER BY ordinal ASC",
+              [problemRow.id]
+            );
+            sampleTests = testCasesResult.rows.map((tc: any) => ({
+              input: tc.input,
+              expectedOutput: tc.expected_output,
+            }));
+          }
+
+          const publicProblem: PublicProblem = problemRow
+            ? {
+                id: problemRow.id,
+                slug: problemRow.slug,
+                title: problemRow.title,
+                statement: problemRow.statement,
+                difficulty: problemRow.difficulty,
+                timeLimitMs: problemRow.time_limit_ms,
+                memoryLimitKb: problemRow.memory_limit_kb,
+                tags: problemRow.tags || [],
+                sampleTests,
+              }
+            : {
+                id: "00000000-0000-0000-0000-000000000001",
+                slug: "two-sum",
+                title: "Two Sum",
+                statement: "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.",
+                difficulty: "easy",
+                timeLimitMs: 2000,
+                memoryLimitKb: 262144,
+                tags: ["Array", "Hash Table"],
+                sampleTests: [],
+              };
+
+          const matchDurationMs = 300_000;
+          const now = new Date();
+          const endsAtDate = new Date(Date.now() + matchDurationMs + 3_000);
+
+          // INSERT real row into matches table in Postgres
+          await pool.query(
+            `INSERT INTO matches (id, problem_id, mode, status, player_one_id, player_two_id, started_at, ended_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+            [
+              matchId,
+              publicProblem.id,
+              mode,
+              "waiting",
+              player1.userId,
+              player2.userId,
+              now,
+              endsAtDate,
+            ]
+          );
+
+          // Create in-memory & Redis room
+          await matchHandler.createRoom(
             roomId,
             matchId,
             [player1.userId, player2.userId],
-            "problem-placeholder", // TODO: Select random problem
-            300_000 // 5 minute match
+            publicProblem.id,
+            matchDurationMs
           );
 
           // Transition to countdown phase
@@ -156,16 +224,27 @@ async function runMatchmakingCycle(
           // After 3 second countdown, transition to active
           const COUNTDOWN_MS = 3_000;
           setTimeout(async () => {
-            const activeRoom = matchHandler.getRoom(roomId);
-            if (activeRoom && activeRoom.phase === "countdown") {
-              // Set match end time to 5 minutes from now
-              const matchDurationMs = 300_000;
-              activeRoom.startedAt = Date.now();
-              activeRoom.endsAt = Date.now() + matchDurationMs;
-              await matchHandler.transitionPhase(roomId, "active");
-              console.log(
-                `[Matchmaking] 🚀 Match ${matchId} started in room ${roomId}`
-              );
+            try {
+              const activeRoom = matchHandler.getRoom(roomId);
+              if (activeRoom && activeRoom.phase === "countdown") {
+                const startedAt = Date.now();
+                const endsAt = startedAt + matchDurationMs;
+                activeRoom.startedAt = startedAt;
+                activeRoom.endsAt = endsAt;
+                await matchHandler.transitionPhase(roomId, "active");
+
+                // Update database match status to active
+                await pool.query(
+                  "UPDATE matches SET status = 'active', started_at = NOW(), ended_at = $1 WHERE id = $2",
+                  [new Date(endsAt), matchId]
+                );
+
+                console.log(
+                  `[Matchmaking] 🚀 Match ${matchId} started in room ${roomId}`
+                );
+              }
+            } catch (transitionErr) {
+              console.error("[Matchmaking] Error in countdown transition:", transitionErr);
             }
           }, COUNTDOWN_MS);
 
@@ -173,37 +252,17 @@ async function runMatchmakingCycle(
           const matchFoundPayload1: MatchFoundPayload = {
             roomId,
             matchId,
-            problem: {
-              id: "problem-placeholder",
-              title: "Sample Problem",
-              description: "This is a sample problem",
-              difficulty: "easy" as const,
-              testCases: [],
-            },
-            opponent: {
-              id: user2.id,
-              username: user2.username,
-              rating: user2.rating,
-            },
-            countdownMs: 3_000, // 3 second countdown before match starts
+            problem: publicProblem,
+            opponent: user2,
+            countdownMs: 3_000,
           };
 
           const matchFoundPayload2: MatchFoundPayload = {
             roomId,
             matchId,
-            problem: {
-              id: "problem-placeholder",
-              title: "Sample Problem",
-              description: "This is a sample problem",
-              difficulty: "easy" as const,
-              testCases: [],
-            },
-            opponent: {
-              id: user1.id,
-              username: user1.username,
-              rating: user1.rating,
-            },
-            countdownMs: 3_000, // 3 second countdown before match starts
+            problem: publicProblem,
+            opponent: user1,
+            countdownMs: 3_000,
           };
 
           // Send to player 1's socket
@@ -221,7 +280,7 @@ async function runMatchmakingCycle(
           }
 
           console.log(
-            `[Matchmaking] 🎮 Matched ${player1.userId} (${player1.rating}) ⚔️ ${player2.userId} (${player2.rating}) in room ${roomId}`
+            `[Matchmaking] 🎮 Matched ${player1.userId} (${player1.rating}) ⚔️ ${player2.userId} (${player2.rating}) in room ${roomId} for match ${matchId}`
           );
 
           // Remove both from queue

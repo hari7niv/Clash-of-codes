@@ -188,9 +188,11 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
           testPassed = comparison.passed;
           details = comparison.details.join(", ");
           
-          // If output comparison fails, set to wrong_answer
+          // If output comparison fails, record wrong_answer according to priority
           if (!testPassed) {
-            highestPriorityVerdict = "wrong_answer";
+            if (!highestPriorityVerdict || VERDICT_PRIORITY["wrong_answer"] > VERDICT_PRIORITY[highestPriorityVerdict]) {
+              highestPriorityVerdict = "wrong_answer";
+            }
           }
         }
 

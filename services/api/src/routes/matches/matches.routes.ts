@@ -40,7 +40,7 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
     // Time remaining should come from server-authoritative timer_sync events via WebSocket
     // For now, return null and client should use match.endsAt from match-server
     const now = Date.now();
-    const endsAt = data.match.endsAt ? new Date(data.match.endsAt).getTime() : Date.now() + 300_000;
+    const endsAt = data.match.endedAt ? new Date(data.match.endedAt).getTime() : Date.now() + 300_000;
     const timeRemainingSeconds = Math.max(0, Math.round((endsAt - now) / 1000));
 
     return {

@@ -104,15 +104,36 @@ export default function Battle() {
     const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
     return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
   };
-  const submitCode = () => {
+  const submitCode = (action: "run" | "submit" = "submit") => {
     if (!socket || !connected) return;
     setRunState("running");
-    setSubmissionStatus("SUBMITTED FOR JUDGING...");
+    setSubmissionStatus(
+      action === "run" ? "RUNNING SAMPLE TESTS..." : "SUBMITTED FOR JUDGING..."
+    );
     socket.emit("submit_code", {
       roomId,
       language: "typescript",
       sourceCode: code,
+      action,
     });
+  };
+
+  const problem = matchData?.problem || {
+    title: "Minimum Window",
+    topic: "STRING / SLIDING WINDOW",
+    difficulty: "Medium",
+    points: 25,
+    statement:
+      "Given strings s and t, return the minimum window substring of s such that every character in t is included. If there is no such window, return an empty string.",
+    constraints: [
+      "Time limit: 2000ms",
+      "Memory limit: 256MB",
+      "Target time complexity: O(n)",
+    ],
+    examples: [
+      { input: "s = “ADOBECODEBANC”, t = “ABC”", output: "“BANC”" },
+      { input: "s = “a”, t = “aa”", output: "“”" },
+    ],
   };
 
   return (
@@ -159,7 +180,9 @@ export default function Battle() {
             <div className="hidden h-10 w-px bg-white/10 sm:block" />
             <div>
               <span className="section-kicker block">Match</span>
-              <span className="font-mono text-xs text-[#d1d2d7]">#92A8</span>
+              <span className="font-mono text-xs text-[#d1d2d7]">
+                {matchData?.matchCode || `#${matchId.substring(0, 4).toUpperCase()}`}
+              </span>
             </div>
           </div>
         </div>
@@ -171,65 +194,49 @@ export default function Battle() {
             <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h1 className="font-display text-3xl font-bold tracking-[-.06em]">
-                  Minimum Window
+                  {problem.title}
                 </h1>
                 <p className="mt-2 font-mono text-[11px] text-[#858893]">
-                  STRING / SLIDING WINDOW
+                  {problem.topic.toUpperCase()}
                 </p>
               </div>
               <div className="flex gap-2">
-                <Pill tone="amber">Medium</Pill>
-                <Pill>25 pts</Pill>
+                <Pill tone="amber">{problem.difficulty}</Pill>
+                <Pill>{problem.points || 25} pts</Pill>
               </div>
             </div>
             <p className="mt-5 text-sm leading-6 text-[#c4c6ce]">
-              Given strings{" "}
-              <code className="rounded-sm bg-white/[.07] px-1.5 py-0.5 font-mono text-[11px] text-[#e8e8ea]">
-                s
-              </code>{" "}
-              and{" "}
-              <code className="rounded-sm bg-white/[.07] px-1.5 py-0.5 font-mono text-[11px] text-[#e8e8ea]">
-                t
-              </code>
-              , return the minimum window substring of{" "}
-              <code className="rounded-sm bg-white/[.07] px-1.5 py-0.5 font-mono text-[11px] text-[#e8e8ea]">
-                s
-              </code>{" "}
-              such that every character in{" "}
-              <code className="rounded-sm bg-white/[.07] px-1.5 py-0.5 font-mono text-[11px] text-[#e8e8ea]">
-                t
-              </code>{" "}
-              is included. If there is no such window, return an empty string.
+              {problem.statement}
             </p>
           </div>
           <div className="space-y-6 p-5 sm:p-6">
             <div>
               <p className="section-kicker">Constraints</p>
               <ul className="mt-3 space-y-2 font-mono text-[11px] leading-5 text-[#aaaeb9]">
-                <li>• 1 ≤ s.length, t.length ≤ 10⁵</li>
-                <li>• s and t consist of English letters.</li>
-                <li>• Target time complexity: O(n).</li>
+                {problem.constraints?.map((c: string, idx: number) => (
+                  <li key={idx}>• {c}</li>
+                )) || <li>• Standard execution constraints</li>}
               </ul>
             </div>
             <div>
               <p className="section-kicker">Examples</p>
               <div className="mt-3 space-y-3">
-                <div className="border border-white/[.09] bg-[#111216] p-3 font-mono text-[11px] leading-5">
-                  <span className="text-[#727580]">input</span>
-                  <span className="ml-3 text-[#d7d8dc]">
-                    s = “ADOBECODEBANC”, t = “ABC”
-                  </span>
-                  <br />
-                  <span className="text-[#727580]">output</span>
-                  <span className="ml-3 text-[#b5df73]">“BANC”</span>
-                </div>
-                <div className="border border-white/[.09] bg-[#111216] p-3 font-mono text-[11px] leading-5">
-                  <span className="text-[#727580]">input</span>
-                  <span className="ml-3 text-[#d7d8dc]">s = “a”, t = “aa”</span>
-                  <br />
-                  <span className="text-[#727580]">output</span>
-                  <span className="ml-3 text-[#b5df73]">“”</span>
-                </div>
+                {problem.examples?.map((ex: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className="border border-white/[.09] bg-[#111216] p-3 font-mono text-[11px] leading-5"
+                  >
+                    <span className="text-[#727580]">input</span>
+                    <span className="ml-3 text-[#d7d8dc]">{ex.input}</span>
+                    <br />
+                    <span className="text-[#727580]">output</span>
+                    <span className="ml-3 text-[#b5df73]">{ex.output}</span>
+                  </div>
+                )) || (
+                  <div className="border border-white/[.09] bg-[#111216] p-3 font-mono text-[11px] leading-5">
+                    <span className="text-[#727580]">No sample examples provided</span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="border-t border-white/[.08] pt-5">
@@ -261,14 +268,14 @@ export default function Battle() {
                 <Check className="h-3 w-3" /> Saved
               </Pill>
               <button
-                onClick={submitCode}
+                onClick={() => submitCode("run")}
                 className="secondary-button min-h-8 px-3 text-[11px]"
               >
                 <Play className="h-3.5 w-3.5" />
                 {runState === "running" ? "Running..." : "Run"}
               </button>
               <button
-                onClick={submitCode}
+                onClick={() => submitCode("submit")}
                 className="primary-button min-h-8 px-3 text-[11px]"
               >
                 <Send className="h-3.5 w-3.5" />

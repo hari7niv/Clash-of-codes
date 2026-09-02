@@ -16,6 +16,8 @@ x-judge0-env: &judge0-env
   POSTGRES_DB: judge0
   POSTGRES_USER: judge0
   POSTGRES_PASSWORD: judge0
+  ENABLE_NETWORK: "false"
+  JUDGE0_ENABLE_NETWORK: "false"
 
 services:
   server:

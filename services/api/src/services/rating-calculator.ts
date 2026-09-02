@@ -46,8 +46,8 @@ const completMatchInternal = async (matchId: string, tx: any) => {
     .where(eq(submissions.matchId, matchId));
 
   // Group submissions by user
-  const player1Submissions = matchSubmissions.filter(s => s.userId === match.playerOneId);
-  const player2Submissions = matchSubmissions.filter(s => s.userId === match.playerTwoId);
+  const player1Submissions = matchSubmissions.filter((s: any) => s.userId === match.playerOneId);
+  const player2Submissions = matchSubmissions.filter((s: any) => s.userId === match.playerTwoId);
 
   // Determine verdict for each player (take last submission or best result)
   const player1Verdict = player1Submissions.length > 0

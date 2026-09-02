@@ -27,6 +27,7 @@ export interface SubmitCodePayload {
   /** Language key (validated against LANGUAGES server-side). */
   language: string;
   sourceCode: string;
+  action?: 'run' | 'submit';
 }
 
 export interface RequestReconnectPayload {
