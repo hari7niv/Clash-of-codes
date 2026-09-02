@@ -96,26 +96,30 @@ export async function listenToMatchQueue(
           return;
         }
 
-        // Emit submission_result to submitter
-        io.to(`room:${roomId}`).emit(SOCKET_EVENTS.SUBMISSION_RESULT, {
-          roomId,
-          submissionId,
-          verdict: verdict.verdict || "error",
-          passedTests: verdict.passedTests || 0,
-          totalTests: verdict.totalTests || 0,
-          runtimeMs: verdict.runtimeMs || null,
-        });
+        const submitterSocketId = matchHandler.getSocketForUser(submitterId);
+        if (submitterSocketId) {
+          io.to(submitterSocketId).emit(SOCKET_EVENTS.SUBMISSION_RESULT, {
+            roomId,
+            submissionId,
+            verdict: verdict.verdict || "error",
+            passedTests: verdict.passedTests || 0,
+            totalTests: verdict.totalTests || 0,
+            runtimeMs: verdict.runtimeMs || null,
+          });
+        }
 
-        // Emit opponent_progress to opponent
-        io.to(`room:${roomId}`).emit(SOCKET_EVENTS.OPPONENT_PROGRESS, {
-          roomId,
-          verdict: verdict.verdict || "error",
-          passedTests: verdict.passedTests || 0,
-          totalTests: verdict.totalTests || 0,
-        });
+        const opponentSocketId = matchHandler.getSocketForUser(opponentId);
+        if (opponentSocketId) {
+          io.to(opponentSocketId).emit(SOCKET_EVENTS.OPPONENT_PROGRESS, {
+            roomId,
+            verdict: verdict.verdict || "error",
+            passedTests: verdict.passedTests || 0,
+            totalTests: verdict.totalTests || 0,
+          });
+        }
 
         console.log(
-          `[Match Server] 📊 Broadcast verdict to room ${roomId}: ${verdict.verdict} (${verdict.passedTests}/${verdict.totalTests} tests)`
+          `[Match Server] 📊 Sent verdict to submitter ${submitterId} and progress to opponent in room ${roomId}: ${verdict.verdict} (${verdict.passedTests}/${verdict.totalTests} tests)`
         );
       }
     } catch (error) {

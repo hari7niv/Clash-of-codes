@@ -318,6 +318,9 @@ importers:
       fastify-plugin:
         specifier: ^4.5.1
         version: 4.5.1
+      ioredis:
+        specifier: ^5.3.2
+        version: 5.11.1
       pg:
         specifier: ^8.13.1
         version: 8.23.0

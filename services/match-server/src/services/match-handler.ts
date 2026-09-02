@@ -183,6 +183,13 @@ export class MatchHandler {
   }
 
   /**
+   * Get socket ID for a user
+   */
+  getSocketForUser(userId: string): string | undefined {
+    return this.userToSocket.get(userId);
+  }
+
+  /**
    * Get a room by ID
    */
   getRoom(roomId: string): RoomState | undefined {

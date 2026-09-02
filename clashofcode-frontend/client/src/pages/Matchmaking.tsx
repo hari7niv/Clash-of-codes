@@ -420,7 +420,7 @@ export default function Matchmaking() {
                 </div>
               </div>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                <Link href="/battle" className="primary-button">
+                <Link href={`/battle/${foundMatch?.matchId || ""}`} className="primary-button">
                   <Swords className="h-4 w-4" />
                   Enter battle
                 </Link>

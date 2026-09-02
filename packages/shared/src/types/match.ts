@@ -11,7 +11,7 @@ export type MatchStatus = 'waiting' | 'active' | 'judging' | 'completed' | 'aban
  * Kept here so the client and server never drift on what a phase means
  * (used by the room_state reconnect event).
  */
-export type RoomPhase = 'waiting' | 'countdown' | 'active' | 'judging' | 'completed';
+export type RoomPhase = 'waiting' | 'countdown' | 'active' | 'disconnect_grace' | 'judging' | 'completed';
 
 export interface Match {
   id: string;
