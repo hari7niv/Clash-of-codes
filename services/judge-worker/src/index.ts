@@ -15,6 +15,7 @@ async function start() {
     connection: {
       // BullMQ will parse the Redis URL
       url: REDIS_URL,
+      maxRetriesPerRequest: null, // Required for BullMQ blocking operations
     },
     concurrency: WORKER_CONCURRENCY,
   });

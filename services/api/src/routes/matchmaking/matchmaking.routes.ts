@@ -5,7 +5,9 @@ import { users } from "../../db/schema/users.js";
 import { eq } from "drizzle-orm";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
-const redis = new Redis(REDIS_URL);
+const redis = new Redis(REDIS_URL, {
+  maxRetriesPerRequest: null, // BullMQ compatibility
+});
 
 export const matchmakingRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("onRequest", async (request, reply) => {

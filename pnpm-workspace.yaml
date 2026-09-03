@@ -8,4 +8,4 @@ packages:
 # esbuild is pulled in transitively by tsx.
 allowBuilds:
   esbuild: true
-  msgpackr-extract: set this to true or false
+  msgpackr-extract: false

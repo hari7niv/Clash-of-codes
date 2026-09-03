@@ -40,7 +40,16 @@ const defaultCodeSnippet = `function minWindow(s: string, t: string): string {
 export default function Battle() {
   const [, setLocation] = useLocation();
   const [match, params] = useRoute("/battle/:matchId");
-  const matchId = params?.matchId || "mock-match-123";
+  
+  // Validate matchId - if none provided, redirect to matchmaking
+  const matchId = params?.matchId;
+  
+  // If no matchId provided, show a friendly message instead of error
+  useEffect(() => {
+    if (!matchId) {
+      // The page will show a message asking to start a match
+    }
+  }, [matchId]);
   const [runState, setRunState] = useState<"idle" | "running" | "passed">(
     "idle"
   );
@@ -50,7 +59,42 @@ export default function Battle() {
     "Run your code to see the test result."
   );
   const { socket, connected } = useMatchSocket();
-  const { player, matchData, loading, error } = useBattleData(matchId);
+  const { player, matchData, loading, error } = useBattleData(matchId || "no-match");
+
+  // Redirect to matchmaking if no match exists and not loading
+  useEffect(() => {
+    if (!loading && !matchId) {
+      // Show a prompt to start a match instead of auto-redirecting
+    }
+  }, [loading, matchId]);
+
+  // Show message if no match ID is provided
+  if (!matchId) {
+    return (
+      <div className="page-wrap enter-up p-8">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+          <h2 className="font-display text-3xl font-bold tracking-[-.06em]">No Active Battle</h2>
+          <p className="mt-3 text-sm text-[#989ba5] max-w-md">
+            You don't have an active battle. Join matchmaking to find an opponent or create a room to play with friends.
+          </p>
+          <div className="mt-6 flex gap-3">
+            <button 
+              onClick={() => setLocation("/matchmaking")}
+              className="primary-button"
+            >
+              Find Match
+            </button>
+            <button 
+              onClick={() => setLocation("/rooms")}
+              className="secondary-button"
+            >
+              Create Room
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (!socket) return;

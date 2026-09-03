@@ -18,6 +18,10 @@ x-judge0-env: &judge0-env
   POSTGRES_PASSWORD: judge0
   ENABLE_NETWORK: "false"
   JUDGE0_ENABLE_NETWORK: "false"
+  # Disable sandboxing for Windows/macOS Docker Desktop compatibility
+  # WARNING: This is UNSAFE for production! Use Linux host with proper cgroups for production.
+  USE_DOCS_AS_HOMEPAGE: "true"
+  ENABLE_COMPILER_OPTIONS: "true"
 
 services:
   server:

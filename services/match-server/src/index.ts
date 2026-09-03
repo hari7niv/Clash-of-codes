@@ -41,7 +41,10 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents, {}, SocketData
 );
 
 // Redis connection for matchmaking queue and pub/sub
-const redis = new Redis(REDIS_URL);
+// BullMQ requires maxRetriesPerRequest: null for blocking operations
+const redis = new Redis(REDIS_URL, {
+  maxRetriesPerRequest: null,
+});
 const matchHandler = new MatchHandler(redis);
 
 console.log("🚀 [Match Server] Starting...");

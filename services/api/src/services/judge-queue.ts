@@ -10,6 +10,7 @@ export function getJudgeQueue(): Queue {
     judgeQueue = new Queue(JUDGE_QUEUE_NAME, {
       connection: {
         url: REDIS_URL,
+        maxRetriesPerRequest: null, // Required for BullMQ blocking operations
       },
     });
   }
