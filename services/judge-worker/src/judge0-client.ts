@@ -42,6 +42,14 @@ export class Judge0Client {
         ...submission,
       };
 
+      console.log("[Judge0 Client] Submitting to Judge0:");
+      console.log(`  - Language ID: ${payload.language_id}`);
+      console.log(`  - Source code length: ${payload.source_code?.length || 0} chars`);
+      console.log(`  - Stdin length: ${payload.stdin?.length || 0} chars`);
+      console.log(`  - Expected output length: ${payload.expected_output?.length || 0} chars`);
+      console.log(`  - CPU time limit: ${payload.cpu_time_limit}s`);
+      console.log(`  - Memory limit: ${payload.memory_limit}KB`);
+
       const response = await axios.post(`${this.baseUrl}/submissions`, payload, {
         params: {
           base64_encoded: false,
@@ -53,9 +61,14 @@ export class Judge0Client {
         },
       });
 
+      console.log(`[Judge0 Client] Submission successful, token: ${response.data.token}`);
       return { token: response.data.token };
     } catch (error) {
       const axiosError = error as AxiosError;
+      console.error("[Judge0 Client] Submission failed:");
+      console.error(`  - Status: ${axiosError.response?.status}`);
+      console.error(`  - Message: ${axiosError.message}`);
+      console.error(`  - Response data:`, axiosError.response?.data);
       throw new Error(
         `Failed to submit to Judge0: ${axiosError.message} (Status: ${axiosError.response?.status})`
       );
@@ -76,6 +89,10 @@ export class Judge0Client {
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError;
+      console.error("[Judge0 Client] Get result failed:");
+      console.error(`  - Token: ${token}`);
+      console.error(`  - Status: ${axiosError.response?.status}`);
+      console.error(`  - Message: ${axiosError.message}`);
       throw new Error(
         `Failed to get result from Judge0: ${axiosError.message} (Status: ${axiosError.response?.status})`
       );
@@ -93,12 +110,32 @@ export class Judge0Client {
   ): Promise<Judge0Result> {
     const startTime = Date.now();
     let delayMs = initialDelayMs;
+    let pollCount = 0;
 
     while (Date.now() - startTime < maxWaitMs) {
+      pollCount++;
       const result = await this.getResult(token);
+
+      console.log(`[Judge0 Client] Poll #${pollCount} for token ${token}:`);
+      console.log(`  - Status ID: ${result.status.id}`);
+      console.log(`  - Status description: ${result.status.description}`);
 
       // Status ID 1 = In Queue, 2 = Processing, 3+ = Done
       if (result.status.id >= 3) {
+        console.log(`[Judge0 Client] Execution completed:`);
+        console.log(`  - Stdout length: ${result.stdout?.length || 0} chars`);
+        console.log(`  - Stderr length: ${result.stderr?.length || 0} chars`);
+        console.log(`  - Compile output length: ${result.compile_output?.length || 0} chars`);
+        console.log(`  - Time: ${result.time || 'N/A'}`);
+        console.log(`  - Memory: ${result.memory || 'N/A'} KB`);
+        
+        if (result.stderr) {
+          console.log(`[Judge0 Client] Stderr: ${result.stderr.substring(0, 200)}`);
+        }
+        if (result.compile_output) {
+          console.log(`[Judge0 Client] Compile output: ${result.compile_output.substring(0, 200)}`);
+        }
+        
         return result;
       }
 
@@ -106,6 +143,7 @@ export class Judge0Client {
       delayMs = Math.min(delayMs * 1.5, 1000); // Exponential backoff, max 1s
     }
 
+    console.error(`[Judge0 Client] Timeout after ${pollCount} polls and ${maxWaitMs}ms`);
     throw new Error(`Timeout waiting for Judge0 result after ${maxWaitMs}ms`);
   }
 }

@@ -50,6 +50,15 @@ export async function listenToMatchQueue(
         return;
       }
 
+      // Check if this is a practice submission (no room notification needed)
+      const isPractice = job.data?.isPractice === true;
+      if (isPractice) {
+        console.log(
+          `[Match Server] 📝 Practice submission ${submissionId} completed, no room notification needed`
+        );
+        return;
+      }
+
       // If matchHandler is provided, route verdict to the correct room
       if (matchHandler) {
         const roomId = matchHandler.getRoomForSubmission(submissionId);

@@ -471,6 +471,7 @@ io.on("connection", (socket) => {
                       roomId: room.roomId,
                       matchId: room.matchId,
                       winnerId,
+                      you: { ratingBefore: 0, ratingAfter: 0, delta: 0 }, // Forfeit win - no rating change
                       reason: "opponent_disconnect",
                     });
                   }

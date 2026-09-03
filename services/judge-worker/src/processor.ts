@@ -40,40 +40,38 @@ interface TestCase {
 /**
  * Get language ID for Judge0 API
  * Language ID mapping (commonly used ones):
- * 1 = C, 2 = C++, 3 = C#, 4 = Clojure, 7 = Ruby, 8 = Bash, 9 = Python (2),
- * 10 = Object-C, 11 = Swift, 12 = Go, 13 = Scala, 14 = Kotlin, 15 = Fortran,
- * 16 = Prolog, 17 = ABAP, 18 = Lua, 19 = Assembly, 20 = Perl, 21 = Java,
- * 22 = C++14, 23 = Lisp, 24 = SQL, 25 = PHP, 26 = Swift, 27 = Rust, 28 = D,
- * 29 = R, 30 = Tcl, 31 = MySQL, 32 = PostgreSQL, 33 = Oracle, 34 = MariaDB,
- * 35 = Prolog, 36 = ALGOL 68, 37 = ACL, 38 = AWK, 39 = BASH, 40 = COBOL,
- * 41 = CVS, 42 = Clojure, 43 = CLISP, 44 = Node.js, 45 = F#, 46 = Forth,
- * 47 = Fortran, 48 = Free Basic, 49 = FreeC, 50 = Gawk, 51 = Gforth, 52 = Golfscript,
- * 53 = Groovy, 54 = Haskell, 55 = Icon, 56 = Intercal, 57 = Io, 58 = Jelly,
- * 59 = Julia, 60 = Kawa, 61 = Lisp, 62 = Logo, 63 = Lua, 64 = Make, 65 = Mumps,
- * 66 = Nim, 67 = OCaml, 68 = Octave, 69 = Oz, 70 = Pascal, 71 = Perl, 72 = PHP,
- * 73 = Pike, 74 = Prolog, 75 = Python (3), 76 = Python (3.10), 77 = Rebol,
- * 78 = Ruby, 79 = Rust, 80 = Sass, 81 = Scala, 82 = Scheme, 83 = Sed, 84 = Smalltalk,
- * 85 = SQL, 86 = Swift, 87 = Tcl, 88 = Typescript, 89 = VB.NET, 90 = Verilog,
- * 91 = VHDL, 92 = Vim, 93 = Wren, 94 = x86 Assembly, 95 = Zsh
+ * Note: These IDs may vary depending on Judge0 version and configuration
+ * Common mappings:
+ * - JavaScript (Node.js): 63 or 93 (newer versions)
+ * - TypeScript: 74 or 94 (depends on Judge0 version)
+ * - Python 3: 71 or 92 (depends on version)
+ * 
+ * Standard Judge0 CE v1.13.0 mappings:
+ * 63 = JavaScript (Node.js 12.14.0)
+ * 71 = Python (3.8.1)
+ * 74 = TypeScript (3.7.4)
+ * 
+ * If you're getting internal errors, verify your Judge0 instance language IDs by:
+ * curl http://localhost:2358/languages
  */
 function getJudge0LanguageId(language: string): number {
   const languageMap: Record<string, number> = {
-    python: 75,
-    python3: 75,
-    js: 44, // Node.js
-    javascript: 44,
-    node: 44,
-    ts: 88, // Typescript
-    typescript: 88,
-    cpp: 23, // C++14 is 23, basic C++ is 2
-    c: 1,
-    java: 21,
-    rust: 79,
-    go: 12,
-    ruby: 78,
-    php: 72,
-    bash: 39,
-    sql: 85,
+    python: 71,
+    python3: 71,
+    js: 63, // Node.js (changed from 44)
+    javascript: 63,
+    node: 63,
+    ts: 74, // TypeScript
+    typescript: 74,
+    cpp: 54, // C++17 (changed from 23)
+    c: 50, // C (GCC 9.2.0)
+    java: 62, // Java (OpenJDK 13.0.1)
+    rust: 73, // Rust (1.40.0)
+    go: 60, // Go (1.13.5)
+    ruby: 72, // Ruby (2.7.0)
+    php: 68, // PHP (7.4.1)
+    bash: 46, // Bash (5.0.0)
+    sql: 82, // SQL (SQLite 3.27.2)
   };
 
   const id = languageMap[language.toLowerCase()];
@@ -89,10 +87,13 @@ function getJudge0LanguageId(language: string): number {
  */
 export async function judgeProcessor(job: Job<JudgeJobData>) {
   console.log(`[Judge Worker] Processing submission: ${job.data.submissionId}`);
+  console.log(`[Judge Worker] Job data:`, JSON.stringify(job.data, null, 2));
 
   const DATABASE_URL = process.env.DATABASE_URL || "postgres://clash:clash@localhost:5440/clashofcode";
   const sql = postgres(DATABASE_URL);
   const judge0 = new Judge0Client();
+
+  console.log(`[Judge Worker] Using Judge0 URL: ${process.env.JUDGE0_URL || "http://localhost:2358"}`);
 
   try {
     // Fetch submission from database
@@ -134,6 +135,8 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
     );
 
     const languageId = getJudge0LanguageId(submission.language);
+    console.log(`[Judge Worker] Language: ${submission.language} -> Judge0 ID: ${languageId}`);
+    
     const testResults: SubmissionTestResult[] = [];
     let passedCount = 0;
     
@@ -154,22 +157,35 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
     for (let i = 0; i < testCases.length; i++) {
       const testCase = testCases[i];
 
+      console.log(`[Judge Worker] Test ${i + 1}/${testCases.length}:`);
+      console.log(`  - Input length: ${testCase.input.length} chars`);
+      console.log(`  - Expected output length: ${testCase.expected_output.length} chars`);
+
       try {
-        // Submit to Judge0
+        // Submit to Judge0 (note: expected_output is not used by Judge0 for execution)
+        const cpuTimeLimit = Math.ceil(problem.time_limit_ms / 1000);
         const { token } = await judge0.submit({
           language_id: languageId,
           source_code: submission.source_code,
           stdin: testCase.input,
-          expected_output: testCase.expected_output,
-          cpu_time_limit: Math.ceil(problem.time_limit_ms / 1000), // Judge0 uses seconds, round up
+          cpu_time_limit: cpuTimeLimit,
+          wall_time_limit: cpuTimeLimit * 2, // Wall time should be higher than CPU time
           memory_limit: problem.memory_limit_kb,
         });
+
+        console.log(`[Judge Worker] Test ${i + 1} submitted with token: ${token}`);
 
         // Poll for result
         const result = await judge0.pollResult(token, 30000, 200);
 
+        console.log(`[Judge Worker] Test ${i + 1} execution complete:`);
+        console.log(`  - Status ID: ${result.status.id}`);
+        console.log(`  - Status description: ${result.status.description}`);
+
         // Map verdict
         const verdict = mapJudge0StatusToVerdict(result.status.id, result.stderr, result.compile_output);
+
+        console.log(`[Judge Worker] Test ${i + 1} verdict: ${verdict}`);
 
         // Track highest priority verdict (P4 fix: don't collapse to wrong_answer)
         if (!highestPriorityVerdict || VERDICT_PRIORITY[verdict] > VERDICT_PRIORITY[highestPriorityVerdict]) {
@@ -187,6 +203,10 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
           );
           testPassed = comparison.passed;
           details = comparison.details.join(", ");
+          
+          console.log(`[Judge Worker] Test ${i + 1} output comparison:`);
+          console.log(`  - Passed: ${testPassed}`);
+          console.log(`  - Details: ${details}`);
           
           // If output comparison fails, record wrong_answer according to priority
           if (!testPassed) {
@@ -206,7 +226,7 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
           details,
         });
 
-        console.log(`[Judge Worker] Test ${i + 1}: ${testPassed ? "PASS" : "FAIL"} - ${details} (${verdict})`);
+        console.log(`Test ${i + 1}: ${testPassed ? "PASS" : "FAIL"} - ${details} (${verdict})`);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.error(`[Judge Worker] Test ${i + 1} error: ${errorMsg}`);

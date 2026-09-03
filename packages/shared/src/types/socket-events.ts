@@ -23,6 +23,7 @@ export interface JoinQueuePayload {
 export type LeaveQueuePayload = Record<string, never>;
 
 export interface SubmitCodePayload {
+  roomId: string;
   matchId: string;
   /** Language key (validated against LANGUAGES server-side). */
   language: string;
@@ -31,6 +32,7 @@ export interface SubmitCodePayload {
 }
 
 export interface RequestReconnectPayload {
+  roomId: string;
   matchId: string;
 }
 
@@ -84,6 +86,8 @@ export interface MatchResultPayload {
   winnerId: string | null;
   /** Rating change for *this* client. */
   you: RatingChange;
+  /** Optional reason for match end (e.g., opponent_disconnect). */
+  reason?: string;
 }
 
 /** Full room snapshot — the answer to request_reconnect. */

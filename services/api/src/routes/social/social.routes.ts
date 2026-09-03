@@ -3,12 +3,16 @@ import { z } from "zod";
 import { getFriends, getUserByUsername, lookupUser } from "../../repositories/user.repo.js";
 import { createRoom } from "../../repositories/room.repo.js";
 import { db } from "../../db/client.js";
-import { friendships } from "../../db/schema/users.js";
+import { friendships, users } from "../../db/schema/users.js";
 import { matches } from "../../db/schema/matches.js";
-import { eq, and, or, sql } from "drizzle-orm";
+import { eq, and, or, sql, like, ilike } from "drizzle-orm";
 
 const friendRequestSchema = z.object({
   handle: z.string(),
+});
+
+const friendSearchSchema = z.object({
+  query: z.string().min(1),
 });
 
 export const socialRoutes: FastifyPluginAsync = async (app) => {
@@ -21,13 +25,126 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/", async (request, reply) => {
-    const userId = request.user.sub;
+    const { id: userId } = request.user as { id: string };
     const friends = await getFriends(userId);
     return friends;
   });
 
+  // Search for users by username
+  app.post("/friends/search", async (request, reply) => {
+    const { id: userId } = request.user as { id: string };
+    const body = friendSearchSchema.parse(request.body);
+    
+    // Search users by username (case-insensitive partial match)
+    const searchResults = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        rating: users.rating,
+      })
+      .from(users)
+      .where(
+        and(
+          ilike(users.username, `%${body.query}%`),
+          sql`${users.id} != ${userId}::uuid` // Exclude current user
+        )
+      )
+      .limit(10);
+    
+    if (searchResults.length === 0) {
+      return [];
+    }
+    
+    // Check existing friendships for all found users
+    const userIds = searchResults.map(u => u.id);
+    const existingFriendships = await db
+      .select()
+      .from(friendships)
+      .where(
+        or(
+          and(
+            eq(friendships.userId, userId),
+            sql`${friendships.friendId} = ANY(${userIds}::uuid[])`
+          ),
+          and(
+            eq(friendships.friendId, userId),
+            sql`${friendships.userId} = ANY(${userIds}::uuid[])`
+          )
+        )
+      );
+    
+    // Create a map of user ID to friendship status
+    const friendshipMap = new Map<string, string>();
+    existingFriendships.forEach(f => {
+      const otherUserId = f.userId === userId ? f.friendId : f.userId;
+      friendshipMap.set(otherUserId, f.status);
+    });
+    
+    // Filter out users who are already friends or have pending requests
+    const availableUsers = searchResults.filter(u => !friendshipMap.has(u.id));
+    
+    // Map to public user format
+    return availableUsers.map(u => {
+      const ratingInt = Math.round(u.rating);
+      return {
+        id: u.id,
+        username: u.username,
+        handle: u.username,
+        rating: ratingInt,
+        rank: ratingInt >= 2400 ? "Grandmaster" : 
+              ratingInt >= 2100 ? "Master" :
+              ratingInt >= 1800 ? "Diamond" :
+              ratingInt >= 1500 ? "Platinum" :
+              ratingInt >= 1200 ? "Gold" :
+              ratingInt >= 900 ? "Silver" : "Bronze",
+      };
+    });
+  });
+
+  // Get pending friend requests (where current user is recipient)
+  app.get("/friends/requests", async (request, reply) => {
+    const { id: userId } = request.user as { id: string };
+    
+    // Get pending requests where current user is the recipient
+    const pendingRequests = await db
+      .select({
+        userId: friendships.userId,
+        friendId: friendships.friendId,
+        status: friendships.status,
+        createdAt: friendships.createdAt,
+        requesterUsername: users.username,
+        requesterRating: users.rating,
+      })
+      .from(friendships)
+      .innerJoin(users, eq(users.id, friendships.userId))
+      .where(
+        and(
+          eq(friendships.friendId, userId),
+          eq(friendships.status, "pending")
+        )
+      );
+    
+    return pendingRequests.map(req => {
+      const ratingInt = Math.round(req.requesterRating);
+      return {
+        requestId: `${req.userId}-${req.friendId}`, // Composite key for identification
+        requesterId: req.userId,
+        requesterUsername: req.requesterUsername,
+        requesterHandle: req.requesterUsername,
+        requesterRating: ratingInt,
+        requesterRank: ratingInt >= 2400 ? "Grandmaster" : 
+                      ratingInt >= 2100 ? "Master" :
+                      ratingInt >= 1800 ? "Diamond" :
+                      ratingInt >= 1500 ? "Platinum" :
+                      ratingInt >= 1200 ? "Gold" :
+                      ratingInt >= 900 ? "Silver" : "Bronze",
+        createdAt: req.createdAt,
+      };
+    });
+  });
+
   app.post("/friends/requests", async (request, reply) => {
-    const userId = request.user.sub;
+    const { id: userId } = request.user as { id: string };
     const body = friendRequestSchema.parse(request.body);
     
     // Find the target user by handle
@@ -68,9 +185,72 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
     return { success: true, message: `Friend request sent to ${body.handle}` };
   });
 
+  // Accept friend request
+  app.post("/friends/requests/:requesterId/accept", async (request, reply) => {
+    const { id: userId } = request.user as { id: string };
+    const { requesterId } = request.params as { requesterId: string };
+    
+    // Verify the requester exists
+    const requester = await lookupUser(requesterId);
+    if (!requester) {
+      return reply.code(404).send({ error: "User not found" });
+    }
+    
+    // Find the pending friend request where current user is the recipient
+    const [existingRequest] = await db
+      .select()
+      .from(friendships)
+      .where(
+        and(
+          eq(friendships.userId, requesterId),
+          eq(friendships.friendId, userId),
+          eq(friendships.status, "pending")
+        )
+      );
+    
+    if (!existingRequest) {
+      return reply.code(404).send({ error: "Friend request not found" });
+    }
+    
+    // Update the friendship status to accepted
+    await db
+      .update(friendships)
+      .set({ status: "accepted" })
+      .where(
+        and(
+          eq(friendships.userId, requesterId),
+          eq(friendships.friendId, userId)
+        )
+      );
+    
+    return { 
+      success: true, 
+      message: `You are now friends with ${requester.username}` 
+    };
+  });
+
+  // Decline/reject friend request
+  app.delete("/friends/requests/:requesterId", async (request, reply) => {
+    const { id: userId } = request.user as { id: string };
+    const { requesterId } = request.params as { requesterId: string };
+    
+    // Delete the pending friend request
+    await db
+      .delete(friendships)
+      .where(
+        and(
+          eq(friendships.userId, requesterId),
+          eq(friendships.friendId, userId),
+          eq(friendships.status, "pending")
+        )
+      );
+    
+    return { success: true, message: "Friend request declined" };
+  });
+
   app.post("/friends/:handle/challenge", async (request, reply) => {
     const { handle } = request.params as any;
-    const userId = request.user.sub;
+    const { id: userId } = request.user as { id: string };
     
     // Find the target user by handle
     const targetUser = await getUserByUsername(handle);
@@ -97,7 +277,7 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/friends/:handle/rivalry", async (request, reply) => {
     const { handle } = request.params as any;
-    const userId = request.user.sub;
+    const { id: userId } = request.user as { id: string };
     
     // Find the target user by handle
     const targetUser = await getUserByUsername(handle);
@@ -135,7 +315,7 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/friends/:handle/rematch-invite", async (request, reply) => {
     const { handle } = request.params as any;
-    const userId = request.user.sub;
+    const { id: userId } = request.user as { id: string };
     
     // Find the target user by handle
     const targetUser = await getUserByUsername(handle);

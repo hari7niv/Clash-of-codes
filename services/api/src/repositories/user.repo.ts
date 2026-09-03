@@ -146,7 +146,7 @@ export const getLeaderboard = async (options: {
   const tab = options.tab || "global";
   const userId = options.userId;
 
-  let baseQuery = db.select().from(users);
+  let baseQuery: any = db.select().from(users);
   let countQuery: any;
 
   // Apply tab-specific filtering
@@ -193,7 +193,7 @@ export const getLeaderboard = async (options: {
               ),
               eq(friendships.status, "accepted")
             )
-          ) as any;
+          );
         countQuery = sql`SELECT COUNT(*)::int as count FROM ${users} 
           INNER JOIN ${friendships} ON (
             (${friendships.userId} = ${userId}::uuid AND ${friendships.friendId} = ${users.id}) OR
@@ -256,7 +256,7 @@ export const getLeaderboard = async (options: {
   }
 
   return {
-    items: resultUsers.map((u, i) => {
+    items: resultUsers.map((u: any, i: number) => {
       const pubUser = toPublicUser(u);
       return {
         rank: offset + i + 1,
