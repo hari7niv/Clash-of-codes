@@ -18,6 +18,15 @@ export const users = pgTable("users", {
   dateOfBirth: date("date_of_birth").default("2000-01-01").notNull(),
   bio: text("bio"),
   location: text("location"),
+  // Preferences
+  ratingVisible: boolean("rating_visible").default(true).notNull(),
+  activityVisible: boolean("activity_visible").default(true).notNull(),
+  quickQueue: boolean("quick_queue").default(true).notNull(),
+  reducedMotion: boolean("reduced_motion").default(false).notNull(),
+  matchFoundNotifications: boolean("match_found_notifications").default(true).notNull(),
+  directInvites: boolean("direct_invites").default(true).notNull(),
+  weeklyReview: boolean("weekly_review").default(false).notNull(),
+  discoverable: boolean("discoverable").default(true).notNull(),
 });
 
 export const friendships = pgTable("friendships", {

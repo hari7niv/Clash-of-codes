@@ -15,8 +15,10 @@ export const leaderboardRoutes: FastifyPluginAsync = async (app) => {
     const query = request.query as any;
     const page = parseInt(query.page) || 1;
     const limit = parseInt(query.limit) || 20;
+    const tab = query.tab || "global";
+    const userId = request.user.sub;
 
-    const data = await getLeaderboard({ page, limit });
+    const data = await getLeaderboard({ page, limit, tab, userId });
     return data;
   });
 };

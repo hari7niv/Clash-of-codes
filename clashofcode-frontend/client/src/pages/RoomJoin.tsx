@@ -4,10 +4,10 @@
  */
 import { MatchLine, Pill } from "@/components/ArenaPrimitives";
 import { ArrowRight, CheckCircle2, KeyRound, Link2, ShieldCheck, UserRound } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useEffect } from "react";
 import { Link, useLocation, useRoute } from "wouter";
-
-const previewRoom = { code: "CLO-7M2K", host: "niacodes", mode: "Arena", capacity: "2 / 4", topic: "Random", tempo: "10:00" };
+import { useRoomData } from "@/hooks/useRoomData";
+import { toast } from "sonner";
 
 export default function RoomJoin() {
   const [, setLocation] = useLocation();
@@ -15,10 +15,86 @@ export default function RoomJoin() {
   const [code, setCode] = useState(params?.code ?? "");
   const [guest, setGuest] = useState(true);
   const [alias, setAlias] = useState("Guest Solver");
-  const activeCode = (code || previewRoom.code).trim().toUpperCase();
-  const join = (event: FormEvent) => {
+  const [submitting, setSubmitting] = useState(false);
+  const [roomPreview, setRoomPreview] = useState<any>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+
+  const { joinRoom } = useRoomData(null);
+  const activeCode = (code || "").trim().toUpperCase();
+
+  // Load room preview when code changes
+  useEffect(() => {
+    if (activeCode && activeCode.length >= 4) {
+      loadRoomPreview(activeCode);
+    }
+  }, [activeCode]);
+
+  const loadRoomPreview = async (roomCode: string) => {
+    setLoadingPreview(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/rooms/${roomCode}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRoomPreview(data);
+      } else {
+        setRoomPreview(null);
+      }
+    } catch (err) {
+      setRoomPreview(null);
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const join = async (event: FormEvent) => {
     event.preventDefault();
-    setLocation(`/room/${activeCode}/wait?guest=${guest ? "1" : "0"}&alias=${encodeURIComponent(alias || "Guest Solver")}`);
+    
+    if (!activeCode) {
+      toast.error("Please enter a room code");
+      return;
+    }
+
+    if (guest) {
+      // Guests currently not fully implemented - redirect to waiting room
+      toast.info("Guest mode", { description: "Guest access is being prepared. Joining as signed-in user." });
+      setGuest(false);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await joinRoom(activeCode);
+      toast.success(`Joined room ${activeCode}!`);
+      // Navigate to the room lobby
+      setLocation(`/room/${activeCode}`);
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.error?.message || "Failed to join room";
+      
+      if (err.response?.status === 404) {
+        toast.error("Room not found", { description: "Check the code and try again." });
+      } else if (errorMsg.includes("maximum capacity")) {
+        toast.error("Room is full", { description: "This room has reached its player limit." });
+      } else if (errorMsg.includes("no longer open")) {
+        toast.error("Room closed", { description: "This room is no longer accepting players." });
+      } else {
+        toast.error("Failed to join", { description: errorMsg });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const previewData = roomPreview || { 
+    code: activeCode || "CLO-XXXX", 
+    mode: "Arena", 
+    capacity: 2, 
+    battleType: "standard", 
+    topic: "Random",
+    participants: []
   };
 
   return <div className="page-wrap enter-up mx-auto max-w-5xl">
@@ -26,19 +102,19 @@ export default function RoomJoin() {
       <section className="panel p-5 sm:p-8">
         <MatchLine label="Rooms / Join" />
         <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
-          <div><h1 className="font-display text-4xl font-bold tracking-[-.07em] sm:text-5xl">Enter the room.</h1><p className="mt-3 max-w-xl text-sm leading-6 text-[#989ba5]">Use a host’s room code or shared link. Guests can take a seat without creating an account.</p></div>
-          <Pill tone="lime"><CheckCircle2 className="h-3 w-3" /> Guest entry enabled</Pill>
+          <div><h1 className="font-display text-4xl font-bold tracking-[-.07em] sm:text-5xl">Enter the room.</h1><p className="mt-3 max-w-xl text-sm leading-6 text-[#989ba5]">Use a host's room code or shared link. Guests can take a seat without creating an account.</p></div>
+          {roomPreview && <Pill tone="lime"><CheckCircle2 className="h-3 w-3" /> Room found</Pill>}
         </div>
         <form onSubmit={join} className="mt-8">
-          <label className="block"><span className="section-kicker">Room code</span><div className="mt-3 flex gap-2"><div className="flex min-w-0 flex-1 items-center gap-3 border border-white/12 bg-black/20 px-3 transition-colors focus-within:border-[#b5df73]/60"><KeyRound className="h-4 w-4 flex-none text-[#8b8e98]" /><input value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder={previewRoom.code} className="w-full bg-transparent py-3.5 font-mono text-sm tracking-[.12em] text-white outline-none placeholder:text-[#666974]" /></div><button type="submit" className="primary-button px-4" aria-label="Continue with room code"><ArrowRight className="h-4 w-4" /></button></div></label>
+          <label className="block"><span className="section-kicker">Room code</span><div className="mt-3 flex gap-2"><div className="flex min-w-0 flex-1 items-center gap-3 border border-white/12 bg-black/20 px-3 transition-colors focus-within:border-[#b5df73]/60"><KeyRound className="h-4 w-4 flex-none text-[#8b8e98]" /><input value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="CLO-XXXX" className="w-full bg-transparent py-3.5 font-mono text-sm tracking-[.12em] text-white outline-none placeholder:text-[#666974]" /></div><button type="submit" disabled={submitting || !activeCode} className="primary-button px-4 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Continue with room code"><ArrowRight className="h-4 w-4" /></button></div></label>
           <div className="mt-7 border-y border-white/[.08] py-6"><p className="section-kicker">Entry type</p><div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => setGuest(true)} className={`choice-card p-3 ${guest ? "is-selected" : ""}`}><UserRound className={`h-4 w-4 ${guest ? "text-[#b5df73]" : "text-[#7c808a]"}`} /><span className="mt-3 block text-sm font-semibold">Join as guest</span><span className="mt-1 block text-[11px] leading-4 text-[#878a94]">No account. Your host still controls access.</span></button><button type="button" onClick={() => setGuest(false)} className={`choice-card p-3 ${!guest ? "is-selected" : ""}`}><ShieldCheck className={`h-4 w-4 ${!guest ? "text-[#b5df73]" : "text-[#7c808a]"}`} /><span className="mt-3 block text-sm font-semibold">Account player</span><span className="mt-1 block text-[11px] leading-4 text-[#878a94]">Bring your rating and player profile into the room.</span></button></div>{guest && <label className="mt-5 block text-xs font-medium text-[#d9dadd]">Guest display name<input value={alias} onChange={(event) => setAlias(event.target.value)} className="mt-2 w-full border border-white/12 bg-black/20 px-3 py-3 text-sm text-white outline-none transition focus:border-[#b5df73]/60" /></label>}</div>
-          <div className="mt-5 flex items-start gap-3 border-l-2 border-[#b5df73]/50 bg-[#b5df73]/[.045] px-4 py-3"><CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-[#b5df73]" /><p className="text-xs leading-5 text-[#b9c5a3]">You’ll enter the waiting room first. The host starts the match when the room is ready.</p></div>
-          <button type="submit" className="primary-button mt-7"><Link2 className="h-4 w-4" />Join room</button>
+          <div className="mt-5 flex items-start gap-3 border-l-2 border-[#b5df73]/50 bg-[#b5df73]/[.045] px-4 py-3"><CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-[#b5df73]" /><p className="text-xs leading-5 text-[#b9c5a3]">You'll enter the waiting room first. The host starts the match when the room is ready.</p></div>
+          <button type="submit" disabled={submitting || !activeCode} className="primary-button mt-7 disabled:opacity-50 disabled:cursor-not-allowed"><Link2 className="h-4 w-4" />{submitting ? "Joining..." : "Join room"}</button>
         </form>
       </section>
       <aside className="space-y-5">
-        <section className="control-panel room-join-preview p-5 sm:p-6"><div className="flex items-center justify-between"><p className="section-kicker">Invitation preview</p><Pill tone="neutral">Live</Pill></div><div className="room-code-module mt-5"><div className="flex items-center justify-between"><span className="room-code-value">{activeCode || previewRoom.code}</span><span className="font-mono text-[10px] uppercase tracking-[.11em] text-[#c6aa77]">{previewRoom.mode}</span></div><p className="mt-3 text-xs text-[#b8ae9f]">Hosted by <span className="text-[#ece8e1]">{previewRoom.host}</span></p></div><dl className="room-entry-data mt-5"><div><dt>Roster</dt><dd>{previewRoom.capacity} seats</dd></div><div><dt>Challenge</dt><dd>{previewRoom.topic}</dd></div><div><dt>Tempo</dt><dd>{previewRoom.tempo}</dd></div><div><dt>Guest route</dt><dd className="text-[#b5df73]">Waiting room</dd></div></dl></section>
-        <section className="panel-soft p-5 sm:p-6"><Pill tone="lime">Guest friendly</Pill><h2 className="mt-5 font-display text-2xl font-bold tracking-[-.055em]">No account? No problem.</h2><p className="mt-3 text-xs leading-6 text-[#999ca6]">Guests get a display name and wait for the host’s match start. Room rules still apply, and the host may remove access at any time.</p><div className="mt-7 border-t border-white/[.08] pt-5"><span className="section-kicker">Need a room?</span><Link href="/rooms/create" className="mt-3 flex items-center justify-between text-sm font-semibold hover:text-[#b5df73]">Host your own <ArrowRight className="h-4 w-4" /></Link></div></section>
+        <section className="control-panel room-join-preview p-5 sm:p-6"><div className="flex items-center justify-between"><p className="section-kicker">Room preview</p>{roomPreview ? <Pill tone="lime">Live</Pill> : <Pill tone="neutral">Enter code</Pill>}</div><div className="room-code-module mt-5"><div className="flex items-center justify-between"><span className="room-code-value">{activeCode || "CLO-XXXX"}</span><span className="font-mono text-[10px] uppercase tracking-[.11em] text-[#c6aa77]">{previewData.mode || "Arena"}</span></div>{roomPreview && roomPreview.participants.length > 0 && <p className="mt-3 text-xs text-[#b8ae9f]">Hosted by <span className="text-[#ece8e1]">{roomPreview.participants.find((p: any) => p.role === "Host")?.handle || "Unknown"}</span></p>}</div><dl className="room-entry-data mt-5"><div><dt>Roster</dt><dd>{roomPreview ? `${roomPreview.participants.length} / ${roomPreview.capacity}` : "? / ?"} seats</dd></div><div><dt>Challenge</dt><dd>{previewData.topic || "Random"}</dd></div><div><dt>Tempo</dt><dd>{previewData.battleType || "Standard"}</dd></div><div><dt>Status</dt><dd className={roomPreview ? "text-[#b5df73]" : "text-[#777a85]"}>{roomPreview ? "Open" : loadingPreview ? "Loading..." : "Waiting"}</dd></div></dl></section>
+        <section className="panel-soft p-5 sm:p-6"><Pill tone="lime">Guest friendly</Pill><h2 className="mt-5 font-display text-2xl font-bold tracking-[-.055em]">No account? No problem.</h2><p className="mt-3 text-xs leading-6 text-[#999ca6]">Guests get a display name and wait for the host's match start. Room rules still apply, and the host may remove access at any time.</p><div className="mt-7 border-t border-white/[.08] pt-5"><span className="section-kicker">Need a room?</span><Link href="/rooms/create" className="mt-3 flex items-center justify-between text-sm font-semibold hover:text-[#b5df73]">Host your own <ArrowRight className="h-4 w-4" /></Link></div></section>
       </aside>
     </div>
   </div>;

@@ -3,6 +3,7 @@ import { db } from "../../db/client.js";
 import { problems } from "../../db/schema/problems.js";
 import { userProgress } from "../../db/schema/users.js";
 import { eq, desc } from "drizzle-orm";
+import { practiceSubmissionRoutes } from "./practice-submission.routes.js";
 
 export const practiceRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("onRequest", async (request, reply) => {
@@ -12,6 +13,9 @@ export const practiceRoutes: FastifyPluginAsync = async (app) => {
       reply.send(err);
     }
   });
+
+  // Register practice submission routes
+  app.register(practiceSubmissionRoutes);
 
   app.get("/drills", async (request, reply) => {
     try {

@@ -9,10 +9,7 @@ export function useSettingsData() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [playerRes] = await Promise.all([
-          api.get("/users/me").catch(() => ({ data: null }))
-        ]);
-
+        const playerRes = await api.get("/users/me");
         setData({
           player: playerRes.data,
         });
@@ -27,11 +24,19 @@ export function useSettingsData() {
   }, []);
 
   const updateProfile = async (updates: any) => {
-    // In a real app this would be a PATCH to /users/me
-    setData((prev: any) => ({
-      ...prev,
-      player: { ...prev.player, ...updates }
-    }));
+    try {
+      const response = await api.patch("/users/me", updates);
+      
+      // Update local state with the response
+      setData((prev: any) => ({
+        ...prev,
+        player: response.data,
+      }));
+      
+      return response.data;
+    } catch (err) {
+      throw err;
+    }
   };
 
   return { ...data, loading, error, updateProfile };

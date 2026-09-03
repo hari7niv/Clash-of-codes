@@ -28,9 +28,6 @@ const topics = [
   "Dynamic Programming",
 ];
 
-const roomCode = "CLO-7M2K";
-const guestLink = `${window.location.origin}/join/${roomCode}`;
-
 export default function RoomCreate() {
   const [mode, setMode] = useState<"solo" | "arena">("arena");
   const [capacity, setCapacity] = useState("4");

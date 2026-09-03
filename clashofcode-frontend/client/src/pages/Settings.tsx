@@ -63,17 +63,35 @@ export default function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
   const [search, setSearch] = useState("");
   const [deskMode, setDeskMode] = useState<"standard" | "compact">("standard");
+  const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState({
-    handle: "Loading...",
-    bio: "Working through hard problems, one clean solution at a time.",
-    location: "Bengaluru, India",
+    handle: "",
+    bio: "",
+    location: "",
   });
   
   useEffect(() => {
     if (player) {
-      setProfile(prev => ({ ...prev, handle: player.handle }));
+      setProfile({
+        handle: player.handle || "",
+        bio: player.bio || "",
+        location: player.location || "",
+      });
+      if (player.preferences) {
+        setPreferences({
+          ratingVisible: player.preferences.ratingVisible ?? true,
+          activityVisible: player.preferences.activityVisible ?? true,
+          quickQueue: player.preferences.quickQueue ?? true,
+          reducedMotion: player.preferences.reducedMotion ?? false,
+          matchFound: player.preferences.matchFound ?? true,
+          directInvites: player.preferences.directInvites ?? true,
+          weeklyReview: player.preferences.weeklyReview ?? false,
+          discoverable: player.preferences.discoverable ?? true,
+        });
+      }
     }
   }, [player]);
+  
   const [preferences, setPreferences] = useState({
     ratingVisible: true,
     activityVisible: true,
@@ -88,7 +106,31 @@ export default function Settings() {
   const activeMeta = settingsTabs.find((item) => item.id === activeTab)!;
   const visibleTabs = settingsTabs.filter((item) => `${item.label} ${item.note}`.toLowerCase().includes(search.toLowerCase()));
   const toggle = (key: keyof typeof preferences) => setPreferences((current) => ({ ...current, [key]: !current[key] }));
-  const save = () => toast.success(`${activeMeta.label} saved`);
+  
+  const save = async () => {
+    setSaving(true);
+    try {
+      await updateProfile({
+        handle: profile.handle,
+        bio: profile.bio,
+        location: profile.location,
+        preferences,
+      });
+      toast.success(`${activeMeta.label} saved`, {
+        description: "Your settings have been updated successfully.",
+      });
+    } catch (err: any) {
+      toast.error("Failed to save settings", {
+        description: err.response?.data?.error?.message || "Please try again.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="settings-page page-wrap enter-up p-8 flex justify-center text-[#848792]">Loading settings...</div>;
+  }
 
   const profilePanel = (
     <>
@@ -200,7 +242,7 @@ export default function Settings() {
         </aside>
         <section className="settings-main-panel">
           {panels[activeTab]}
-          <div className="settings-actions"><button type="button" onClick={() => toast("No pending changes")} className="secondary-button">Cancel</button><button type="button" onClick={save} className="primary-button"><Check className="h-4 w-4" />Save changes</button></div>
+          <div className="settings-actions"><button type="button" onClick={() => toast("No pending changes")} className="secondary-button">Cancel</button><button type="button" onClick={save} disabled={saving} className="primary-button disabled:opacity-50 disabled:cursor-not-allowed"><Check className="h-4 w-4" />{saving ? "Saving..." : "Save changes"}</button></div>
         </section>
       </div>
     </div>

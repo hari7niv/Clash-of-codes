@@ -4,23 +4,66 @@
  */
 import { MatchLine, Meter, Pill } from "@/components/ArenaPrimitives";
 import { ArrowRight, BrainCircuit, CalendarDays, Crosshair, LockKeyhole, Play, Sparkles, Timer } from "lucide-react";
-import { useState } from "react";
-import { Link } from "wouter";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { usePracticeData } from "@/hooks/usePracticeData";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
 
 export default function Practice() {
+  const [, setLocation] = useLocation();
   const [filter, setFilter] = useState("Suggested");
   const { drills, trainingSignal, streakData, loading, error } = usePracticeData();
+  const [problems, setProblems] = useState<any[]>([]);
+
+  // Fetch problems from API
+  useEffect(() => {
+    async function loadProblems() {
+      try {
+        const res = await api.get("/problems?limit=10");
+        setProblems(res.data.items || []);
+      } catch (err) {
+        console.error("Failed to load problems:", err);
+      }
+    }
+    loadProblems();
+  }, []);
+
+  const handleStartDrill = (problemId: string) => {
+    if (!problemId) {
+      toast.error("Problem not available");
+      return;
+    }
+    setLocation(`/practice/${problemId}`);
+  };
+
+  const handleDailyChallenge = async () => {
+    try {
+      const res = await api.get("/problems/daily");
+      if (res.data && res.data.id) {
+        setLocation(`/practice/${res.data.id}`);
+      } else {
+        toast.error("No daily challenge available");
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error?.message || "Failed to load daily challenge");
+    }
+  };
 
   if (loading) return <div className="page-wrap enter-up p-8 flex justify-center text-[#848792]">Loading practice...</div>;
   if (error) return <div className="page-wrap enter-up p-8 flex justify-center text-[#e48b87]">Error loading practice data.</div>;
 
-  const activeDrills = drills || [
-    { label: "Warm up", title: "Array Cadence", type: "Easy / Arrays", duration: "08 min", status: "Open", tone: "lime" },
-    { label: "Weakness training", title: "Graph Signal", type: "Medium / Graphs", duration: "18 min", status: "Recommended", tone: "red" },
-    { label: "Battle prep", title: "Pattern Shift", type: "Medium / Sliding window", duration: "12 min", status: "Open", tone: "blue" },
-  ];
+  // Map real problems to drill format
+  const activeDrills = problems.slice(0, 3).map((problem, idx) => ({
+    id: problem.id,
+    label: idx === 0 ? "Warm up" : idx === 1 ? "Weakness training" : "Battle prep",
+    title: problem.title,
+    type: `${problem.difficulty} / ${problem.topic}`,
+    duration: problem.difficulty === "Easy" ? "08 min" : problem.difficulty === "Medium" ? "15 min" : "25 min",
+    status: idx === 1 ? "Recommended" : "Open",
+    tone: idx === 0 ? "lime" : idx === 1 ? "red" : "blue"
+  }));
 
   return <div className="page-wrap enter-up"><header className="relative overflow-hidden border border-white/10 bg-[#191a20] p-6 sm:p-8" style={{ backgroundImage: "linear-gradient(90deg, #191a20 0%, rgba(25,26,32,.88) 45%, rgba(25,26,32,.28)), url('/manus-storage/codeclash-mastery_2fb8de06.jpg')", backgroundSize: "cover", backgroundPosition: "center" }}><div className="relative z-10 max-w-xl"><MatchLine label="Practice / Training desk" /><Pill tone="blue" className="mt-8"><BrainCircuit className="h-3 w-3" /> Personalized queue</Pill><h1 className="mt-4 font-display text-4xl font-bold tracking-[-.07em] sm:text-5xl">Practice with a purpose.</h1><p className="mt-3 text-sm leading-6 text-[#b9bbc3]">Short, targeted work that gives your next battle more edge.</p><div className="mt-6 flex flex-wrap gap-2">{["Suggested", "Arrays", "Graphs", "Daily challenge"].map((option) => <button key={option} onClick={() => setFilter(option)} className={`topic-button ${filter === option ? "is-selected" : ""}`}>{option}</button>)}</div></div></header>
-    <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,.72fr)]"><section className="panel p-5 sm:p-7"><div className="flex items-end justify-between gap-4"><div><p className="section-kicker">Today’s route</p><h2 className="mt-1 font-display text-2xl font-bold tracking-[-.055em]">Choose your next drill</h2></div><span className="font-mono text-[10px] text-[#747783]">{filter.toUpperCase()}</span></div><div className="mt-6 space-y-3">{activeDrills.map((drill: any, index: number) => <div key={drill.title} className="group flex flex-wrap items-center gap-4 border border-white/[.09] bg-white/[.025] p-4 transition-all hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[.045]"><span className="font-mono text-xs text-[#747783]">0{index + 1}</span><div className="min-w-[180px] flex-1"><span className="section-kicker">{drill.label}</span><h3 className="mt-1 font-display text-lg font-bold tracking-[-.045em]">{drill.title}</h3><p className="mt-1 text-xs text-[#9295a0]">{drill.type}</p></div><div className="flex items-center gap-2"><Timer className="h-3.5 w-3.5 text-[#747783]" /><span className="font-mono text-[10px] text-[#aeb0b7]">{drill.duration.toUpperCase()}</span></div><Pill tone={drill.tone as "red" | "lime" | "blue"}>{drill.status}</Pill><button className="secondary-button min-h-9 px-3 text-xs"><Play className="h-3.5 w-3.5" />Start</button></div>)}</div><div className="mt-7 border-t border-white/[.08] pt-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="section-kicker">Daily challenge</p><h3 className="mt-1 font-display text-xl font-bold tracking-[-.05em]">The cleanest parenthesis</h3><p className="mt-2 text-xs leading-5 text-[#90939d]">A fresh stack challenge is waiting. Complete it before the board rotates.</p></div><button className="primary-button"><Crosshair className="h-4 w-4" />Take challenge</button></div></div></section><aside className="space-y-5"><section className="panel p-5"><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-[#f04432]" /><p className="section-kicker">Training signal</p></div><h2 className="mt-4 font-display text-xl font-bold tracking-[-.05em]">{trainingSignal?.topic || "Graphs"} are your clearest unlock.</h2><p className="mt-2 text-xs leading-5 text-[#9295a0]">{trainingSignal?.message || "Two graph drills this week could lift your adaptive battle selection."}</p><div className="mt-5"><div className="mb-2 flex justify-between text-xs"><span className="text-[#c9cbd1]">{trainingSignal?.topic || "Graph"} mastery</span><span className="font-mono text-[#e48b87]">{trainingSignal?.value || 31}%</span></div><Meter value={trainingSignal?.value || 31} tone={trainingSignal?.tone || "red"} /></div><button className="secondary-button mt-6 w-full"><ArrowRight className="h-4 w-4" />Train {trainingSignal?.topic?.toLowerCase() || "graphs"}</button></section><section className="panel p-5"><div className="flex justify-between"><p className="section-kicker">Daily streak</p><CalendarDays className="h-4 w-4 text-[#e1a759]" /></div><p className="mt-3 font-display text-3xl font-bold tracking-[-.06em]">{streakData?.days || 6} days</p><p className="mt-2 text-xs leading-5 text-[#9295a0]">Finish one challenge to keep the run alive. No pressure—just a clean next step.</p><div className="mt-5 grid grid-cols-7 gap-1.5">{(streakData?.last7 || Array.from({ length: 7 })).map((val: any, index: number) => <span key={index} className={`h-7 border ${val === true || index < 6 ? "border-[#e1a759]/40 bg-[#e1a759]/20" : "border-white/10 bg-white/[.03]"}`} />)}</div></section></aside></div></div>;
+    <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,.72fr)]"><section className="panel p-5 sm:p-7"><div className="flex items-end justify-between gap-4"><div><p className="section-kicker">Today’s route</p><h2 className="mt-1 font-display text-2xl font-bold tracking-[-.055em]">Choose your next drill</h2></div><span className="font-mono text-[10px] text-[#747783]">{filter.toUpperCase()}</span></div><div className="mt-6 space-y-3">{activeDrills.map((drill: any, index: number) => <div key={drill.id || drill.title} className="group flex flex-wrap items-center gap-4 border border-white/[.09] bg-white/[.025] p-4 transition-all hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[.045]"><span className="font-mono text-xs text-[#747783]">0{index + 1}</span><div className="min-w-[180px] flex-1"><span className="section-kicker">{drill.label}</span><h3 className="mt-1 font-display text-lg font-bold tracking-[-.045em]">{drill.title}</h3><p className="mt-1 text-xs text-[#9295a0]">{drill.type}</p></div><div className="flex items-center gap-2"><Timer className="h-3.5 w-3.5 text-[#747783]" /><span className="font-mono text-[10px] text-[#aeb0b7]">{drill.duration.toUpperCase()}</span></div><Pill tone={drill.tone as "red" | "lime" | "blue"}>{drill.status}</Pill><button onClick={() => handleStartDrill(drill.id)} className="secondary-button min-h-9 px-3 text-xs"><Play className="h-3.5 w-3.5" />Start</button></div>)}</div><div className="mt-7 border-t border-white/[.08] pt-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="section-kicker">Daily challenge</p><h3 className="mt-1 font-display text-xl font-bold tracking-[-.05em]">The cleanest parenthesis</h3><p className="mt-2 text-xs leading-5 text-[#90939d]">A fresh stack challenge is waiting. Complete it before the board rotates.</p></div><button onClick={handleDailyChallenge} className="primary-button"><Crosshair className="h-4 w-4" />Take challenge</button></div></div></section><aside className="space-y-5"><section className="panel p-5"><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-[#f04432]" /><p className="section-kicker">Training signal</p></div><h2 className="mt-4 font-display text-xl font-bold tracking-[-.05em]">{trainingSignal?.topic || "Graphs"} are your clearest unlock.</h2><p className="mt-2 text-xs leading-5 text-[#9295a0]">{trainingSignal?.message || "Two graph drills this week could lift your adaptive battle selection."}</p><div className="mt-5"><div className="mb-2 flex justify-between text-xs"><span className="text-[#c9cbd1]">{trainingSignal?.topic || "Graph"} mastery</span><span className="font-mono text-[#e48b87]">{trainingSignal?.value || 31}%</span></div><Meter value={trainingSignal?.value || 31} tone={trainingSignal?.tone || "red"} /></div><button className="secondary-button mt-6 w-full"><ArrowRight className="h-4 w-4" />Train {trainingSignal?.topic?.toLowerCase() || "graphs"}</button></section><section className="panel p-5"><div className="flex justify-between"><p className="section-kicker">Daily streak</p><CalendarDays className="h-4 w-4 text-[#e1a759]" /></div><p className="mt-3 font-display text-3xl font-bold tracking-[-.06em]">{streakData?.days || 6} days</p><p className="mt-2 text-xs leading-5 text-[#9295a0]">Finish one challenge to keep the run alive. No pressure—just a clean next step.</p><div className="mt-5 grid grid-cols-7 gap-1.5">{(streakData?.last7 || Array.from({ length: 7 })).map((val: any, index: number) => <span key={index} className={`h-7 border ${val === true || index < 6 ? "border-[#e1a759]/40 bg-[#e1a759]/20" : "border-white/10 bg-white/[.03]"}`} />)}</div></section></aside></div></div>;
 }

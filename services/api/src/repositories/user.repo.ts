@@ -83,8 +83,8 @@ export const updateUser = async (id: string, data: {
 };
 
 export const getFriends = async (userId: string) => {
-  // Query relationships where the user is either user_id or friend_id and status is accepted
-  const userFriendships = await db
+  // Query 1: Get friends where current user is the requester (userId)
+  const asRequester = await db
     .select({
       id: users.id,
       username: users.username,
@@ -92,22 +92,33 @@ export const getFriends = async (userId: string) => {
       status: friendships.status,
     })
     .from(friendships)
-    .innerJoin(
-      users,
-      eq(
-        users.id,
-        sql`CASE WHEN ${friendships.userId} = ${userId}::uuid THEN ${friendships.friendId} ELSE ${friendships.userId} END`
-      )
-    )
+    .innerJoin(users, eq(users.id, friendships.friendId))
     .where(
       and(
-        or(
-          eq(friendships.userId, userId),
-          eq(friendships.friendId, userId)
-        ),
+        eq(friendships.userId, userId),
         eq(friendships.status, "accepted")
       )
     );
+
+  // Query 2: Get friends where current user is the recipient (friendId)
+  const asRecipient = await db
+    .select({
+      id: users.id,
+      username: users.username,
+      rating: users.rating,
+      status: friendships.status,
+    })
+    .from(friendships)
+    .innerJoin(users, eq(users.id, friendships.userId))
+    .where(
+      and(
+        eq(friendships.friendId, userId),
+        eq(friendships.status, "accepted")
+      )
+    );
+
+  // Combine both result sets
+  const userFriendships = [...asRequester, ...asRecipient];
 
   return userFriendships.map(uf => {
     const ratingInt = Math.round(uf.rating);
@@ -123,23 +134,126 @@ export const getFriends = async (userId: string) => {
   });
 };
 
-export const getLeaderboard = async (options: { page?: number; limit?: number }) => {
+export const getLeaderboard = async (options: { 
+  page?: number; 
+  limit?: number; 
+  tab?: string;
+  userId?: string;
+}) => {
   const page = options.page || 1;
   const limit = options.limit || 20;
   const offset = (page - 1) * limit;
+  const tab = options.tab || "global";
+  const userId = options.userId;
 
-  // Query users ordered by rating desc
-  const resultUsers = await db
-    .select()
-    .from(users)
+  let baseQuery = db.select().from(users);
+  let countQuery: any;
+
+  // Apply tab-specific filtering
+  switch (tab.toLowerCase()) {
+    case "weekly":
+      // Weekly filter: users who played in the last 7 days - simplified to all users for now
+      // In production, you'd filter by updatedAt or a lastActiveAt field
+      baseQuery = baseQuery.where(
+        sql`${users.updatedAt} >= NOW() - INTERVAL '7 days'`
+      );
+      countQuery = sql`SELECT COUNT(*)::int as count FROM ${users} WHERE ${users.updatedAt} >= NOW() - INTERVAL '7 days'`;
+      break;
+    
+    case "friends":
+      // Friends filter: only show friends of the current user
+      if (userId) {
+        baseQuery = db
+          .select({
+            id: users.id,
+            username: users.username,
+            email: users.email,
+            passwordHash: users.passwordHash,
+            rating: users.rating,
+            ratingDeviation: users.ratingDeviation,
+            ratingVolatility: users.ratingVolatility,
+            gamesPlayed: users.gamesPlayed,
+            wins: users.wins,
+            losses: users.losses,
+            draws: users.draws,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+            emailVerifiedAt: users.emailVerifiedAt,
+            dateOfBirth: users.dateOfBirth,
+            bio: users.bio,
+            location: users.location,
+          })
+          .from(users)
+          .innerJoin(
+            friendships,
+            and(
+              or(
+                and(eq(friendships.userId, userId), eq(friendships.friendId, users.id)),
+                and(eq(friendships.friendId, userId), eq(friendships.userId, users.id))
+              ),
+              eq(friendships.status, "accepted")
+            )
+          ) as any;
+        countQuery = sql`SELECT COUNT(*)::int as count FROM ${users} 
+          INNER JOIN ${friendships} ON (
+            (${friendships.userId} = ${userId}::uuid AND ${friendships.friendId} = ${users.id}) OR
+            (${friendships.friendId} = ${userId}::uuid AND ${friendships.userId} = ${users.id})
+          ) AND ${friendships.status} = 'accepted'`;
+      }
+      break;
+    
+    case "country":
+      // Country filter: users from the same location (using location field as proxy)
+      // This would require proper country data in production
+      if (userId) {
+        const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+        if (currentUser && currentUser.location) {
+          baseQuery = baseQuery.where(eq(users.location, currentUser.location));
+          countQuery = sql`SELECT COUNT(*)::int as count FROM ${users} WHERE ${users.location} = ${currentUser.location}`;
+        }
+      }
+      break;
+    
+    case "rising stars":
+      // Rising stars: users with highest rating gain in the last 7 days
+      // For now, filter by recent activity and high win rate
+      baseQuery = baseQuery.where(
+        and(
+          sql`${users.updatedAt} >= NOW() - INTERVAL '7 days'`,
+          sql`${users.gamesPlayed} >= 5`
+        )
+      );
+      countQuery = sql`SELECT COUNT(*)::int as count FROM ${users} 
+        WHERE ${users.updatedAt} >= NOW() - INTERVAL '7 days' AND ${users.gamesPlayed} >= 5`;
+      break;
+    
+    case "topic":
+      // Topic-based leaderboard - would need additional tables for problem topics
+      // For now, fall through to global
+    case "global":
+    default:
+      countQuery = sql`SELECT COUNT(*)::int as count FROM ${users}`;
+      break;
+  }
+
+  // Execute the query with ordering and pagination
+  const resultUsers = await baseQuery
     .orderBy(desc(users.rating))
     .limit(limit)
     .offset(offset);
 
-  const countResult = await db.execute(
-    sql`SELECT COUNT(*)::int as count FROM ${users}`
-  );
+  const countResult = await db.execute(countQuery);
   const count = (countResult.rows[0] as any)?.count || 0;
+
+  // Calculate user's rank if userId provided
+  let userRank: number | null = null;
+  if (userId) {
+    const userRankResult = await db.execute(
+      sql`SELECT COUNT(*)::int + 1 as rank FROM ${users} u2 
+          WHERE u2.rating > (SELECT rating FROM ${users} WHERE id = ${userId}::uuid)`
+    );
+    userRank = (userRankResult.rows[0] as any)?.rank || null;
+  }
 
   return {
     items: resultUsers.map((u, i) => {
@@ -159,7 +273,8 @@ export const getLeaderboard = async (options: { page?: number; limit?: number })
     }),
     page,
     limit,
-    total: count
+    total: count,
+    userRank
   };
 };
 

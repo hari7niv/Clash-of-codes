@@ -5,6 +5,8 @@ export function useLeaderboardData(tab: string) {
   const [data, setData] = useState({
     player: null as any,
     leaderboard: [] as any[],
+    total: 0,
+    userRank: null as number | null,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -20,7 +22,9 @@ export function useLeaderboardData(tab: string) {
 
         setData({
           player: playerRes.data,
-          leaderboard: leaderboardRes.data,
+          leaderboard: leaderboardRes.data.items || [],
+          total: leaderboardRes.data.total || 0,
+          userRank: leaderboardRes.data.userRank || null,
         });
       } catch (err: any) {
         setError(err);

@@ -11,6 +11,14 @@ export const createRoom = async (data: {
   maxPlayers?: number;
   timeControl?: string;
 }) => {
+  // Validate time control values before DB transaction
+  const validTimeControls = ["blitz", "standard", "deep"];
+  if (data.timeControl && !validTimeControls.includes(data.timeControl)) {
+    throw new Error(
+      `Invalid time control: ${data.timeControl}. Must be one of: ${validTimeControls.join(", ")}`
+    );
+  }
+
   return await db.transaction(async (tx) => {
     let roomCode = "";
     let attempts = 0;
@@ -30,22 +38,32 @@ export const createRoom = async (data: {
       throw new Error("Failed to generate a unique room code. Please try again.");
     }
     
-    const [newRoom] = await tx.insert(rooms).values({
-      code: roomCode,
-      hostUserId: data.hostUserId,
-      isPrivate: data.isPrivate ?? true,
-      maxPlayers: data.maxPlayers ?? 2,
-      timeControl: data.timeControl ?? "standard",
-      status: "open",
-    }).returning();
+    try {
+      const [newRoom] = await tx.insert(rooms).values({
+        code: roomCode,
+        hostUserId: data.hostUserId,
+        isPrivate: data.isPrivate ?? true,
+        maxPlayers: data.maxPlayers ?? 2,
+        timeControl: data.timeControl ?? "standard",
+        status: "open",
+      }).returning();
 
-    // Host joins the room as a member
-    await tx.insert(roomMembers).values({
-      roomId: newRoom.id,
-      userId: data.hostUserId,
-    });
+      // Host joins the room as a member
+      await tx.insert(roomMembers).values({
+        roomId: newRoom.id,
+        userId: data.hostUserId,
+      });
 
-    return newRoom;
+      return newRoom;
+    } catch (err: any) {
+      // Check if it's a constraint violation
+      if (err.code === "23514") { // PostgreSQL check constraint violation
+        throw new Error(
+          `Invalid room configuration: ${err.message}. Valid time controls are: ${validTimeControls.join(", ")}`
+        );
+      }
+      throw err;
+    }
   });
 };
 

@@ -12,7 +12,7 @@ export default function RoomWaiting() {
   const [location] = useLocation();
   const [isReady, setIsReady] = useState(false);
   const search = useMemo(() => new URLSearchParams(location.split("?")[1] ?? ""), [location]);
-  const code = location.match(/\/room\/([^/]+)/)?.[1]?.toUpperCase() ?? "CLO-7M2K";
+  const code = location.match(/\/room\/([^/]+)/)?.[1]?.toUpperCase() ?? "";
   const guestName = search.get("alias") ?? "Guest Solver";
   const guest = search.get("guest") !== "0";
   const shareLink = `${window.location.origin}/join/${code}`;

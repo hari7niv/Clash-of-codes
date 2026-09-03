@@ -442,127 +442,37 @@ io.on("connection", (socket) => {
             room.disconnectedPlayers.delete(userId);
             room.graceTimers.delete(userId);
 
-            // If match is still active or judging, declare connected opponent the winner
+            // If match is still active or judging, complete it with forfeit
             if (room.phase === "active" || room.phase === "judging") {
               const winnerId = room.playerIds.find((id) => id !== userId);
               await matchHandler.transitionPhase(room.roomId, "completed");
 
               if (winnerId) {
+                // Update match with winner (forfeit)
                 try {
-                  const usersRes = await pool.query(
-                    "SELECT id, rating, rating_deviation, rating_volatility, games_played, wins, losses, draws FROM users WHERE id = ANY($1::uuid[])",
-                    [[userId, winnerId]]
+                  await pool.query(
+                    "UPDATE matches SET status = 'completed', winner_id = $1, ended_at = NOW() WHERE id = $2",
+                    [winnerId, room.matchId]
+                  );
+                  
+                  // Call match completion for rating updates
+                  const playerOneId = room.playerIds[0];
+                  const playerTwoId = room.playerIds[1] || null;
+                  await completeMatchAndRatings(room.matchId, playerOneId, playerTwoId);
+
+                  console.log(
+                    `[Match Server] 🏆 Match ${room.matchId} completed by forfeit. Winner: ${winnerId}`
                   );
 
-                  const loser = usersRes.rows.find((u: any) => u.id === userId);
-                  const winner = usersRes.rows.find((u: any) => u.id === winnerId);
-
-                  if (winner && loser) {
-                    const ratingResult = computeMatchRatings(
-                      {
-                        rating: winner.rating,
-                        deviation: winner.rating_deviation,
-                        volatility: winner.rating_volatility,
-                      },
-                      {
-                        rating: loser.rating,
-                        deviation: loser.rating_deviation,
-                        volatility: loser.rating_volatility,
-                      },
-                      "player_one"
-                    );
-
-                    const now = new Date();
-                    const client = await pool.connect();
-                    try {
-                      await client.query("BEGIN");
-
-                      // Update match status & winner
-                      await client.query(
-                        "UPDATE matches SET status = 'completed', winner_id = $1, ended_at = $2 WHERE id = $3",
-                        [winnerId, now, room.matchId]
-                      );
-
-                      // Update winner stats
-                      await client.query(
-                        `UPDATE users SET rating = $1, rating_deviation = $2, rating_volatility = $3,
-                         games_played = games_played + 1, wins = wins + 1, updated_at = NOW() WHERE id = $4`,
-                        [
-                          ratingResult.playerOne.rating,
-                          ratingResult.playerOne.deviation,
-                          ratingResult.playerOne.volatility,
-                          winnerId,
-                        ]
-                      );
-
-                      // Update loser stats
-                      await client.query(
-                        `UPDATE users SET rating = $1, rating_deviation = $2, rating_volatility = $3,
-                         games_played = games_played + 1, losses = losses + 1, updated_at = NOW() WHERE id = $4`,
-                        [
-                          ratingResult.playerTwo.rating,
-                          ratingResult.playerTwo.deviation,
-                          ratingResult.playerTwo.volatility,
-                          userId,
-                        ]
-                      );
-
-                      // Insert rating history
-                      const winnerDelta = ratingResult.playerOne.rating - winner.rating;
-                      const loserDelta = ratingResult.playerTwo.rating - loser.rating;
-
-                      await client.query(
-                        `INSERT INTO ratings_history (id, user_id, match_id, rating_before, rating_after, rd_before, rd_after, vol_before, vol_after, delta, created_at)
-                         VALUES
-                         (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()),
-                         (gen_random_uuid(), $10, $2, $11, $12, $13, $14, $15, $16, $17, NOW())`,
-                        [
-                          winnerId,
-                          room.matchId,
-                          winner.rating,
-                          ratingResult.playerOne.rating,
-                          winner.rating_deviation,
-                          ratingResult.playerOne.deviation,
-                          winner.rating_volatility,
-                          ratingResult.playerOne.volatility,
-                          winnerDelta,
-                          userId,
-                          loser.rating,
-                          ratingResult.playerTwo.rating,
-                          loser.rating_deviation,
-                          ratingResult.playerTwo.deviation,
-                          loser.rating_volatility,
-                          ratingResult.playerTwo.volatility,
-                          loserDelta,
-                        ]
-                      );
-
-                      await client.query("COMMIT");
-
-                      console.log(
-                        `[Match Server] 🏆 Match ${room.matchId} completed by forfeit. Winner: ${winnerId} (+${Math.round(winnerDelta)})`
-                      );
-
-                      // Emit match_result to winner socket
-                      const winnerSocketId = matchHandler.getSocketForUser(winnerId);
-                      if (winnerSocketId) {
-                        io.to(winnerSocketId).emit(SOCKET_EVENTS.MATCH_RESULT, {
-                          roomId: room.roomId,
-                          matchId: room.matchId,
-                          winnerId,
-                          you: {
-                            ratingBefore: Math.round(winner.rating),
-                            ratingAfter: Math.round(ratingResult.playerOne.rating),
-                            delta: Math.round(winnerDelta),
-                          },
-                        });
-                      }
-                    } catch (dbErr) {
-                      await client.query("ROLLBACK");
-                      console.error("[Match Server] Error persisting forfeit resolution:", dbErr);
-                    } finally {
-                      client.release();
-                    }
+                  // Emit match_result to winner socket
+                  const winnerSocketId = matchHandler.getSocketForUser(winnerId);
+                  if (winnerSocketId) {
+                    io.to(winnerSocketId).emit(SOCKET_EVENTS.MATCH_RESULT, {
+                      roomId: room.roomId,
+                      matchId: room.matchId,
+                      winnerId,
+                      reason: "opponent_disconnect",
+                    });
                   }
                 } catch (forfeitErr) {
                   console.error("[Match Server] Error in forfeit resolution:", forfeitErr);
@@ -603,6 +513,9 @@ let cleanupMatchmaking: (() => void) | null = null;
   }
 })();
 
+// Import match completion service
+import { completeMatch as completeMatchAndRatings } from "./services/match-completion.js";
+
 // Server-authoritative timer: Broadcast timer_sync every 100ms to all active rooms
 const timerInterval = setInterval(() => {
   const now = Date.now();
@@ -621,8 +534,22 @@ const timerInterval = setInterval(() => {
     });
 
     if (timeRemaining <= 0 && room.phase === "active") {
-      matchHandler.transitionPhase(room.roomId, "judging").catch((err) => {
-        console.error(`[Match Server] Error transitioning room ${room.roomId}:`, err);
+      matchHandler.transitionPhase(room.roomId, "judging").then(async () => {
+        // After transitioning to judging, complete the match and calculate ratings
+        console.log(`[Match Server] Time expired for room ${room.roomId}, completing match...`);
+        
+        const playerOneId = room.playerIds[0];
+        const playerTwoId = room.playerIds[1] || null;
+        
+        await completeMatchAndRatings(room.matchId, playerOneId, playerTwoId);
+        
+        // Transition to completed phase
+        await matchHandler.transitionPhase(room.roomId, "completed");
+        
+        // TODO: Emit match_result to both players with rating updates
+        // This requires fetching the rating history from the database
+      }).catch((err) => {
+        console.error(`[Match Server] Error completing room ${room.roomId}:`, err);
       });
     }
   }

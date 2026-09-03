@@ -28,7 +28,7 @@ export const getMatchById = async (matchId: string, currentUserId?: string) => {
 };
 
 export const createSubmission = async (data: {
-  matchId: string;
+  matchId: string | null;
   userId: string;
   problemId: string;
   language: string;
@@ -49,6 +49,11 @@ export const createSubmission = async (data: {
   }).returning();
 
   return newSubmission;
+};
+
+export const getSubmissionById = async (submissionId: string) => {
+  const [submission] = await db.select().from(submissions).where(eq(submissions.id, submissionId));
+  return submission || null;
 };
 
 export const getMatchResult = async (matchId: string, userId: string) => {

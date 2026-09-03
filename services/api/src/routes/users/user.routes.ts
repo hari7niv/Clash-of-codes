@@ -45,6 +45,19 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       streak: progress?.streak ?? 0,
       peak: progress?.peakRating ? Math.round(progress.peakRating) : ratingInt,
       battles: user.gamesPlayed,
+      bio: user.bio,
+      location: user.location,
+      // Preferences
+      preferences: {
+        ratingVisible: user.ratingVisible ?? true,
+        activityVisible: user.activityVisible ?? true,
+        quickQueue: user.quickQueue ?? true,
+        reducedMotion: user.reducedMotion ?? false,
+        matchFound: user.matchFoundNotifications ?? true,
+        directInvites: user.directInvites ?? true,
+        weeklyReview: user.weeklyReview ?? false,
+        discoverable: user.discoverable ?? true,
+      },
     };
   });
 
@@ -59,10 +72,28 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch("/me", async (request, reply) => {
     const { id } = request.user as { id: string };
-    const body = request.body as { handle?: string; username?: string; name?: string; bio?: string; location?: string };
+    const body = request.body as { 
+      handle?: string; 
+      username?: string; 
+      name?: string; 
+      bio?: string; 
+      location?: string;
+      preferences?: {
+        ratingVisible?: boolean;
+        activityVisible?: boolean;
+        quickQueue?: boolean;
+        reducedMotion?: boolean;
+        matchFound?: boolean;
+        directInvites?: boolean;
+        weeklyReview?: boolean;
+        discoverable?: boolean;
+      };
+    };
     
-    const targetUsername = body.handle || body.username || body.name;
+    const updates: any = {};
 
+    // Handle username update
+    const targetUsername = body.handle || body.username || body.name;
     if (targetUsername) {
       const trimmed = targetUsername.trim();
       if (trimmed.length < 3) {
@@ -73,15 +104,28 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       if (collidingUser && collidingUser.id !== id) {
         return reply.code(409).send({ error: { code: "CONFLICT", message: "Username already taken" } });
       }
-
-      await db.update(users).set({ username: trimmed }).where(eq(users.id, id));
+      updates.username = trimmed;
     }
 
-    if (body.bio !== undefined || body.location !== undefined) {
-      await db.update(users).set({
-        bio: body.bio,
-        location: body.location
-      }).where(eq(users.id, id));
+    // Handle profile fields
+    if (body.bio !== undefined) updates.bio = body.bio;
+    if (body.location !== undefined) updates.location = body.location;
+
+    // Handle preferences
+    if (body.preferences) {
+      if (body.preferences.ratingVisible !== undefined) updates.ratingVisible = body.preferences.ratingVisible;
+      if (body.preferences.activityVisible !== undefined) updates.activityVisible = body.preferences.activityVisible;
+      if (body.preferences.quickQueue !== undefined) updates.quickQueue = body.preferences.quickQueue;
+      if (body.preferences.reducedMotion !== undefined) updates.reducedMotion = body.preferences.reducedMotion;
+      if (body.preferences.matchFound !== undefined) updates.matchFoundNotifications = body.preferences.matchFound;
+      if (body.preferences.directInvites !== undefined) updates.directInvites = body.preferences.directInvites;
+      if (body.preferences.weeklyReview !== undefined) updates.weeklyReview = body.preferences.weeklyReview;
+      if (body.preferences.discoverable !== undefined) updates.discoverable = body.preferences.discoverable;
+    }
+
+    // Apply updates if there are any
+    if (Object.keys(updates).length > 0) {
+      await db.update(users).set(updates).where(eq(users.id, id));
     }
 
     const updated = await getUserById(id);

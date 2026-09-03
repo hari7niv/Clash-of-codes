@@ -14,13 +14,30 @@ type Participant = { id: string; initials: string; handle: string; role: "Host" 
 export default function RoomLobby() {
   const [location, setLocation] = useLocation();
   const search = useMemo(() => new URLSearchParams(location.split("?")[1] ?? ""), [location]);
-  const code = location.match(/\/room\/([^?]+)/)?.[1]?.toUpperCase() ?? "CLO-7M2K";
+  const code = location.match(/\/room\/([^?]+)/)?.[1]?.toUpperCase() ?? "";
   const { room, player, loading, error } = useRoomData(code);
   
   const mode = search.get("mode") ?? "arena";
   const max = mode === "solo" ? "1" : search.get("max") ?? "4";
   const guestName = search.get("guest") === "1" ? (search.get("alias") ?? "Guest Solver") : null;
-  const [participants, setParticipants] = useState<Participant[]>(() => [{ id: "host", initials: player?.initials || "ME", handle: player?.handle || "Loading...", role: "Host", rating: String(player?.rating || "1500"), tone: "red" }, ...(mode === "arena" ? [{ id: "rohan", initials: "RM", handle: "rohanbits", role: "Player" as const, rating: "1856", tone: "blue" as const }] : []), ...(guestName ? [{ id: "guest", initials: guestName.slice(0, 2).toUpperCase(), handle: guestName, role: "Guest" as const, rating: "Guest", tone: "stone" as const }] : [])]);
+  const [participants, setParticipants] = useState<Participant[]>(() => [
+    { 
+      id: "host", 
+      initials: player?.initials || "ME", 
+      handle: player?.handle || "Loading...", 
+      role: "Host", 
+      rating: String(player?.rating || "1500"), 
+      tone: "red" 
+    },
+    ...(guestName ? [{ 
+      id: "guest", 
+      initials: guestName.slice(0, 2).toUpperCase(), 
+      handle: guestName, 
+      role: "Guest" as const, 
+      rating: "Guest", 
+      tone: "stone" as const 
+    }] : [])
+  ]);
   const [allowGuests, setAllowGuests] = useState(true);
   const [approval, setApproval] = useState(false);
   const [hiddenProgress, setHiddenProgress] = useState(true);

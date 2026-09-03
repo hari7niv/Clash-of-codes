@@ -163,14 +163,25 @@ export const roomRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(403).send({ error: { code: "FORBIDDEN", message: "Only host can start the room match" } });
       }
 
+      // Get members
+      const members = await db.select().from(roomMembers).where(eq(roomMembers.roomId, roomRecord.id));
+      
+      // Ensure at least 2 players in arena mode
+      if (!roomRecord.isPrivate && members.length < 2) {
+        return reply.code(400).send({ 
+          error: { 
+            code: "INSUFFICIENT_PLAYERS", 
+            message: "Arena mode requires at least 2 players to start" 
+          } 
+        });
+      }
+
       // Pick a random problem to match
       const [selectedProblem] = await db.select().from(problems).limit(1);
       if (!selectedProblem) {
         return reply.code(500).send({ error: { code: "INTERNAL_ERROR", message: "No problems seeded in DB" } });
       }
 
-      // Get members
-      const members = await db.select().from(roomMembers).where(eq(roomMembers.roomId, roomRecord.id));
       const playerOne = members[0]?.userId || userId;
       const playerTwo = members[1]?.userId || null;
 

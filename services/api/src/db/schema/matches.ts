@@ -53,7 +53,7 @@ export const rooms = pgTable("rooms", {
   problemId: uuid("problem_id").references(() => problems.id),
   isPrivate: boolean("is_private").default(true).notNull(),
   maxPlayers: integer("max_players").default(2).notNull(),
-  timeControl: text("time_control").default("rapid").notNull(),
+  timeControl: text("time_control").default("standard").notNull(),
   status: text("status").default("open").notNull(), // 'open','starting','in_progress','closed'
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

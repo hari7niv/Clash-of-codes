@@ -6,7 +6,7 @@ import PublicShell from "@/components/PublicShell";
 import { ArrowRight, Crosshair, Sparkles } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { Link, useLocation } from "wouter";
-
+import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 
 type Errors = { username?: string; email?: string; password?: string; confirm?: string; dateOfBirth?: string; general?: string };
@@ -14,12 +14,14 @@ const validEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 export default function Signup() {
   const [, setLocation] = useLocation();
+  const { setUser } = useAuth();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [errors, setErrors] = useState<Errors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -45,10 +47,18 @@ export default function Signup() {
     
     if (Object.keys(next).length > 0) return;
     
+    setIsSubmitting(true);
     try {
       const response = await api.post("/auth/signup", { username, email, password, dateOfBirth });
       if (response.data?.accessToken) {
         localStorage.setItem("token", response.data.accessToken);
+        if (response.data?.refreshToken) {
+          localStorage.setItem("refreshToken", response.data.refreshToken);
+        }
+        // Set user in AuthContext
+        if (response.data?.user) {
+          setUser(response.data.user);
+        }
         setLocation("/app");
       } else {
         setErrors({ general: "Invalid response from server." });
@@ -56,6 +66,8 @@ export default function Signup() {
     } catch (err: any) {
       const errMsg = err.response?.data?.error?.message || "Registration failed. Try again.";
       setErrors({ general: errMsg });
+    } finally {
+      setIsSubmitting(false);
     }
   };
   

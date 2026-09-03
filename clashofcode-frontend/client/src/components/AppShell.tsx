@@ -3,10 +3,11 @@
  * workspace header create a single continuous competition desk rather than separate chrome pieces.
  */
 import { Link, useLocation } from "wouter";
-import { Bell, BookOpen, ChevronRight, Crosshair, Flame, Home, Menu, Plus, Settings, Swords, Trophy, Users, X } from "lucide-react";
+import { Bell, BookOpen, ChevronRight, Crosshair, Flame, Home, LogOut, Menu, Plus, Settings, Swords, Trophy, Users, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Avatar, RankBadge } from "./ArenaPrimitives";
 import { usePlayerData } from "@/hooks/usePlayerData";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { href: "/app", label: "Home", icon: Home },
@@ -21,8 +22,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { player } = usePlayerData();
+  const { logout } = useAuth();
   const closeMobile = () => setMobileOpen(false);
   const isActive = (href: string) => href === "/app" ? location === "/app" : location.startsWith(href);
+
+  const handleLogout = async () => {
+    await logout();
+  };
 
   return <div className="app-shell text-[#f3f0ea] selection:bg-[#f04432] selection:text-white">
     <header className="mobile-topbar">
@@ -34,9 +40,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="rail-section-label">Navigate</div>
       <nav className="mt-3 flex flex-col gap-1" aria-label="Main navigation">{navItems.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={closeMobile} className={`rail-link ${isActive(href) ? "is-active" : ""}`}><Icon className="h-[17px] w-[17px]" /><span>{label}</span>{isActive(href) && <ChevronRight className="ml-auto h-4 w-4" />}</Link>)}</nav>
       <div className="rail-match-action"><span className="rail-section-label">Matchmaking</span><Link href="/matchmaking" onClick={closeMobile} className="battle-rail-cta"><Crosshair className="h-4 w-4" /><span>Find opponent</span></Link></div>
-      <div className="mt-auto px-4 pb-5">
+      <div className="mt-auto px-4 pb-5 space-y-2">
         {player ? (
-          <Link href="/profile" onClick={closeMobile} className={`profile-rail ${location.startsWith("/profile") ? "is-active" : ""}`}><Avatar initials={player.initials} tone="red" size="sm" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-[#eeeef0]">{player.handle}</span><span className="block font-mono text-[9px] text-[#747783]">{player.rating} RATING</span></span><RankBadge rank={player.rank} className="scale-90 origin-right" /></Link>
+          <>
+            <Link href="/profile" onClick={closeMobile} className={`profile-rail ${location.startsWith("/profile") ? "is-active" : ""}`}><Avatar initials={player.initials} tone="red" size="sm" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-[#eeeef0]">{player.handle}</span><span className="block font-mono text-[9px] text-[#747783]">{player.rating} RATING</span></span><RankBadge rank={player.rank} className="scale-90 origin-right" /></Link>
+            <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-[#9295a0] hover:text-[#e48b87] hover:bg-white/[.03] rounded transition-colors"><LogOut className="h-3.5 w-3.5" /><span>Log out</span></button>
+          </>
         ) : (
           <div className="h-12 w-full animate-pulse bg-white/5 rounded"></div>
         )}

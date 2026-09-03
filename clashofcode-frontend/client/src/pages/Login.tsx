@@ -6,17 +6,18 @@ import PublicShell from "@/components/PublicShell";
 import { ArrowRight, KeyRound, Mail, ShieldCheck } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { Link, useLocation } from "wouter";
-
-import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Errors = { email?: string; password?: string; general?: string };
 const validEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 export default function Login() {
   const [, setLocation] = useLocation();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Errors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -28,17 +29,18 @@ export default function Login() {
     
     if (Object.keys(next).length > 0) return;
     
+    setIsSubmitting(true);
     try {
-      const response = await api.post("/auth/login", { email, password });
-      if (response.data?.accessToken) {
-        localStorage.setItem("token", response.data.accessToken);
-        setLocation("/app");
-      } else {
-        setErrors({ general: "Invalid response from server." });
-      }
+      await login(email, password);
+      // Check for returnTo parameter
+      const params = new URLSearchParams(window.location.search);
+      const returnTo = params.get("returnTo");
+      setLocation(returnTo && returnTo.startsWith("/") ? decodeURIComponent(returnTo) : "/app");
     } catch (err: any) {
       const errMsg = err.response?.data?.error?.message || "Invalid credentials or server connection failed.";
       setErrors({ general: errMsg });
+    } finally {
+      setIsSubmitting(false);
     }
   };
   
@@ -73,7 +75,7 @@ export default function Login() {
           </label>
           <div className="flex items-center justify-between gap-3">
             <a href="#forgot-password" className="auth-link">Forgot password?</a>
-            <button className="primary-button" type="submit">Log in <ArrowRight className="h-4 w-4" /></button>
+            <button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? "Logging in..." : "Log in"} <ArrowRight className="h-4 w-4" /></button>
           </div>
         </form>
         <p className="auth-switch">New to ClashOfCode? <Link href="/signup">Create an account</Link></p>
