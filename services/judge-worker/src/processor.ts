@@ -224,6 +224,9 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
           testIndex: i,
           passed: testPassed,
           details,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          compileOutput: result.compile_output,
         });
 
         console.log(`Test ${i + 1}: ${testPassed ? "PASS" : "FAIL"} - ${details} (${verdict})`);

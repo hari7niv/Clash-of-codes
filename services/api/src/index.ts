@@ -1,6 +1,10 @@
 import { buildApp } from "./app.js";
+import { validateSchemaOnStartup } from "./utils/schema-validation.js";
 
 const start = async () => {
+  // Validate database schema before starting server
+  await validateSchemaOnStartup();
+  
   const app = await buildApp();
   
   try {

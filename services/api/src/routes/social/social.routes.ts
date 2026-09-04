@@ -31,7 +31,7 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // Search for users by username
-  app.post("/friends/search", async (request, reply) => {
+  app.post("/search", async (request, reply) => {
     const { id: userId } = request.user as { id: string };
     const body = friendSearchSchema.parse(request.body);
     
@@ -102,7 +102,7 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // Get pending friend requests (where current user is recipient)
-  app.get("/friends/requests", async (request, reply) => {
+  app.get("/requests", async (request, reply) => {
     const { id: userId } = request.user as { id: string };
     
     // Get pending requests where current user is the recipient
@@ -143,7 +143,7 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
     });
   });
 
-  app.post("/friends/requests", async (request, reply) => {
+  app.post("/requests", async (request, reply) => {
     const { id: userId } = request.user as { id: string };
     const body = friendRequestSchema.parse(request.body);
     
@@ -186,7 +186,7 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // Accept friend request
-  app.post("/friends/requests/:requesterId/accept", async (request, reply) => {
+  app.post("/requests/:requesterId/accept", async (request, reply) => {
     const { id: userId } = request.user as { id: string };
     const { requesterId } = request.params as { requesterId: string };
     
@@ -230,7 +230,7 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // Decline/reject friend request
-  app.delete("/friends/requests/:requesterId", async (request, reply) => {
+  app.delete("/requests/:requesterId", async (request, reply) => {
     const { id: userId } = request.user as { id: string };
     const { requesterId } = request.params as { requesterId: string };
     
@@ -248,7 +248,7 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
     return { success: true, message: "Friend request declined" };
   });
 
-  app.post("/friends/:handle/challenge", async (request, reply) => {
+  app.post("/:handle/challenge", async (request, reply) => {
     const { handle } = request.params as any;
     const { id: userId } = request.user as { id: string };
     
@@ -275,7 +275,7 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.get("/friends/:handle/rivalry", async (request, reply) => {
+  app.get("/:handle/rivalry", async (request, reply) => {
     const { handle } = request.params as any;
     const { id: userId } = request.user as { id: string };
     
@@ -313,7 +313,7 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.post("/friends/:handle/rematch-invite", async (request, reply) => {
+  app.post("/:handle/rematch-invite", async (request, reply) => {
     const { handle } = request.params as any;
     const { id: userId } = request.user as { id: string };
     

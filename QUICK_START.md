@@ -1,166 +1,212 @@
-# 🚀 QUICK START - TEST EVERYTHING NOW!
+# Quick Start Guide - ClashOfCode Development
 
-## ✅ ALL SERVICES RUNNING
+## First Time Setup (5 minutes)
 
-```
-✅ Frontend:     http://localhost:3000
-✅ API:          http://localhost:4000
-✅ Match Server: http://localhost:4100 (WebSocket)
-✅ Judge0:       http://localhost:2359
-✅ Database:     PostgreSQL (working)
-✅ Cache:        Redis (working)
-```
+```bash
+# 1. Install dependencies
+pnpm install
 
----
+# 2. Copy environment file
+cp .env.example .env
+# PowerShell: Copy-Item .env.example .env
 
-## 👤 TEST ACCOUNT
+# 3. Start database containers
+pnpm docker:up
 
-```
-Email:    alice@clash.dev
-Password: password123
-```
+# 4. Apply migrations
+pnpm migrate
 
----
-
-## 🌐 OPEN FRONTEND NOW
-
-### **http://localhost:3000**
-
-1. Login with `alice@clash.dev` / `password123`
-2. Browse the app
-3. View problems
-4. Check your profile
-
----
-
-## 🔌 QUICK API TESTS
-
-### **Copy & Paste into PowerShell:**
-
-#### 1️⃣ **LOGIN & GET TOKEN**
-```powershell
-$loginBody = @{email='alice@clash.dev';password='password123'} | ConvertTo-Json
-$login = Invoke-RestMethod -Uri 'http://localhost:4000/api/auth/login' -Method POST -Body $loginBody -ContentType 'application/json'
-$token = $login.accessToken
-Write-Host "Token: $token"
+# 5. Seed test data
+pnpm seed
 ```
 
-#### 2️⃣ **GET YOUR PROFILE**
-```powershell
-Invoke-RestMethod -Uri 'http://localhost:4000/api/users/me' -Method GET -Headers @{Authorization="Bearer $token"} | ConvertTo-Json
+## Daily Development (Windows)
+
+Open **4-5 terminals** and run:
+
+```bash
+# Terminal 1 - Mock Judge0 (for Windows/WSL2)
+pnpm dev:judge0-mock
+
+# Terminal 2 - API Server
+pnpm dev:api
+
+# Terminal 3 - Match Server
+pnpm dev:match
+
+# Terminal 4 - Judge Worker
+pnpm dev:judge
+
+# Terminal 5 - Frontend (if working on UI)
+cd clashofcode-frontend
+pnpm dev
 ```
 
-#### 3️⃣ **GET ALL PROBLEMS**
-```powershell
-Invoke-RestMethod -Uri 'http://localhost:4000/api/problems' -Method GET -Headers @{Authorization="Bearer $token"} | ConvertTo-Json
+**Note:** Use mock Judge0 for local dev. Real Judge0 requires Linux cgroups.
+
+## Daily Development (Linux Production)
+
+```bash
+# Terminal 1 - Real Judge0
+pnpm judge0:up
+
+# Terminal 2-5 - Same as above (but judge worker uses port 2358)
 ```
 
-#### 4️⃣ **TEST CODE EXECUTION**
-```powershell
-$code = @{source_code='print("Hello!")';language_id=71;stdin=''} | ConvertTo-Json
-Invoke-RestMethod -Uri 'http://localhost:2359/submissions?base64_encoded=false&wait=true' -Method POST -Body $code -ContentType 'application/json' | ConvertTo-Json
+## Common Commands
+
+| Command | Purpose |
+|---------|---------|
+| `pnpm migrate` | Apply new database migrations |
+| `pnpm migrate:verify` | Check migration status and constraints |
+| `pnpm seed` | Reset database with test data |
+| `pnpm docker:up` | Start Postgres + Redis |
+| `pnpm docker:down` | Stop Postgres + Redis |
+| `pnpm judge0:up` | Start real Judge0 (Linux only) |
+| `pnpm judge0:down` | Stop real Judge0 |
+| `pnpm dev:judge0-mock` | Start mock Judge0 (port 2359) |
+
+## After Pulling New Code
+
+```bash
+# 1. Update dependencies
+pnpm install
+
+# 2. Apply any new migrations
+pnpm migrate
+
+# 3. Verify migrations applied correctly
+pnpm migrate:verify
+
+# 4. Rebuild shared package (usually automatic)
+pnpm build:shared
+
+# 5. Restart your services
 ```
 
-#### 5️⃣ **TEST A+B SOLUTION**
-```powershell
-$code = @{source_code='a, b = map(int, input().split())
-print(a + b)';language_id=71;stdin='5 3'} | ConvertTo-Json
-Invoke-RestMethod -Uri 'http://localhost:2359/submissions?base64_encoded=false&wait=true' -Method POST -Body $code -ContentType 'application/json' | ConvertTo-Json
-```
+**Note:** The API server now validates schema on startup and will show loud warnings if migrations are pending.
 
----
+## Quick Health Checks
 
-## 📋 WHAT YOU CAN TEST
-
-### Frontend
-- ✅ Login/Logout
-- ✅ View Profile
-- ✅ Browse Problems
-- ✅ See Problem Details
-- ✅ View Examples & Starter Code
-
-### API Endpoints
-- ✅ POST /api/auth/login
-- ✅ GET /api/users/me
-- ✅ GET /api/problems
-- ✅ GET /api/problems/:id
-
-### Judge0 Code Execution
-- ✅ Execute Python code
-- ✅ Get stdout/stderr
-- ✅ Get execution time
-- ✅ Accept/Reject verdicts
-
----
-
-## 🎯 NEXT STEPS FOR ADVANCED TESTING
-
-### Two-User Matchmaking (Browser)
-1. Open 2 browser windows
-2. Tab 1: Login as alice
-3. Tab 2: Login as bob
-4. Both join matchmaking queue
-5. Watch for match creation
-
-### Battle Flow (When Matchmaking Works)
-1. Wait for match to be created
-2. Both players enter battle
-3. Submit code solutions
-4. See verdicts in real-time
-5. See winner/loser determination
-
-### Monitor Logs
-- API logs show all requests
-- Match Server logs show connections
-- Judge Worker logs show job processing
-- Mock Judge0 logs show code execution
-
----
-
-## 🐛 IF SOMETHING BREAKS
-
-### Check Service Status
-```powershell
-# API
-curl http://localhost:4000/health
-
-# Mock Judge0
+```bash
+# Check Judge0 mock
 curl http://localhost:2359/about
 
-# Match Server (no health endpoint, check process)
-netstat -ano | findstr ":4100"
+# Check Judge0 real (Linux)
+curl http://localhost:2358/about
+
+# Check API server
+curl http://localhost:3001/health
+
+# Check databases
+docker ps  # Should see clash-postgres, clash-redis
 ```
 
-### Common Issues
-| Issue | Solution |
-|-------|----------|
-| "Connection refused" | Service not running, check process list |
-| "CORS error" | Restart API with correct origin |
-| "Token invalid" | Re-login to get new token |
-| "Judge0 error" | Make sure it's running on 2359 |
-| "Database error" | Check PostgreSQL is running |
+## Troubleshooting Quick Fixes
+
+### "Migration failed" or "Column doesn't exist"
+```bash
+pnpm migrate
+pnpm migrate:verify  # Confirm migrations applied
+```
+
+### "Room creation fails with constraint violation"
+```bash
+# Check migration status
+pnpm migrate:verify
+
+# Apply pending migrations
+pnpm migrate
+
+# Restart API server
+```
+
+See [MIGRATION_TROUBLESHOOTING.md](./MIGRATION_TROUBLESHOOTING.md) for details.
+
+### "Port already in use"
+```powershell
+# Windows
+netstat -ano | findstr :3001
+taskkill /PID <PID> /F
+```
+
+### "Judge0 Internal Error"
+```bash
+# Use mock Judge0 instead
+pnpm dev:judge0-mock
+```
+
+### Stray Docker containers
+```powershell
+.\scripts\cleanup-docker.ps1
+```
+
+## Key Ports
+
+| Service | Port |
+|---------|------|
+| Frontend | 5173 |
+| API Server | 3001 |
+| Match Server | 4100 |
+| Judge0 Mock | 2359 |
+| Judge0 Real | 2358 |
+| Postgres | 5440 |
+| Redis | 6379 |
+
+## Test Accounts (after seed)
+
+| Username | Password | Role |
+|----------|----------|------|
+| alice | password | User |
+| bob | password | User |
+| charlie | password | User |
+
+## Need More Help?
+
+- **Windows Setup**: [WINDOWS_DEV_SETUP.md](./WINDOWS_DEV_SETUP.md)
+- **Judge0 Issues**: [JUDGE0_TROUBLESHOOTING.md](./JUDGE0_TROUBLESHOOTING.md)
+- **Full README**: [README.md](./README.md)
+
+## Common Development Workflows
+
+### Adding a New Feature
+1. Pull latest code: `git pull`
+2. Check for new migrations: `pnpm migrate`
+3. Create feature branch: `git checkout -b feature/my-feature`
+4. Start services (see Daily Development above)
+5. Make changes, test locally
+6. Commit and push
+
+### Testing a Submission
+1. Navigate to `/practice` in browser
+2. Select any problem
+3. Write solution in editor
+4. Click "Run" to test sample cases
+5. Click "Submit" to test full suite
+6. Check judge-worker terminal for logs
+
+### Testing Battle Mode
+1. Open browser in two tabs
+2. Login as different users (alice/bob)
+3. Both join matchmaking or same room
+4. Battle starts automatically
+5. Submit solutions
+6. Check match-server logs for events
+
+### Debugging Judge0
+```bash
+# Check worker logs
+docker logs -f workers-1
+
+# Check judge-worker logs
+# (in terminal where pnpm dev:judge is running)
+
+# Test Judge0 directly
+curl -X POST http://localhost:2359/submissions \
+  -H "Content-Type: application/json" \
+  -d '{"source_code": "print(42)", "language_id": 71}'
+```
 
 ---
 
-## 📞 CREDENTIALS
-
-| User | Email | Password | Rating |
-|------|-------|----------|--------|
-| alice | alice@clash.dev | password123 | 1500 |
-| bob | bob@clash.dev | password123 | 1520 |
-| carol | carol@clash.dev | password123 | 1480 |
-| dave | dave@clash.dev | password123 | 1650 |
-
----
-
-## 🎉 YOU'RE ALL SET!
-
-- Frontend: **http://localhost:3000**
-- APIs are ready for testing
-- Code execution works
-- Database is populated
-- Everything is online!
-
-**Start testing now! 🚀**
-
-For detailed testing guide, see: `TESTING_GUIDE.md`
+**Pro Tip:** Keep this file open in a terminal/editor while developing. It's faster than searching through full documentation.

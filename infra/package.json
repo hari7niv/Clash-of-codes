@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "migrate": "tsx scripts/migrate.ts",
+    "migrate:check": "tsx scripts/check-migrations.ts",
+    "migrate:verify": "tsx scripts/verify-migrations.ts",
     "seed": "tsx scripts/seed-problems.ts && tsx scripts/seed-dev-users.ts",
     "seed:problems": "tsx scripts/seed-problems.ts",
     "seed:users": "tsx scripts/seed-dev-users.ts",

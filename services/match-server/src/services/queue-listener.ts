@@ -75,8 +75,25 @@ export async function listenToMatchQueue(
           return;
         }
 
-        // Parse verdict from returnvalue (should be { verdict, passedTests, totalTests, runtimeMs })
+        // Parse verdict from returnvalue (should be { verdict, passedTests, totalTests, runtimeMs, testResults })
         const verdict = returnvalue as any;
+
+        // Extract console output from first failed test or last test
+        let stdout = "";
+        let stderr = "";
+        let compileOutput = "";
+        
+        if (verdict.testResults && Array.isArray(verdict.testResults)) {
+          // Find first failed test, or use last test if all passed
+          const failedTest = verdict.testResults.find((t: any) => !t.passed);
+          const testToShow = failedTest || verdict.testResults[verdict.testResults.length - 1];
+          
+          if (testToShow) {
+            stdout = testToShow.stdout || "";
+            stderr = testToShow.stderr || "";
+            compileOutput = testToShow.compileOutput || "";
+          }
+        }
 
         // Update submission with verdict
         matchHandler.updateSubmissionVerdict(
@@ -114,6 +131,9 @@ export async function listenToMatchQueue(
             passedTests: verdict.passedTests || 0,
             totalTests: verdict.totalTests || 0,
             runtimeMs: verdict.runtimeMs || null,
+            stdout,
+            stderr,
+            compileOutput,
           });
         }
 
