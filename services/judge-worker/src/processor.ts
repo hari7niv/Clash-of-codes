@@ -7,6 +7,7 @@ import postgres from "postgres";
 
 interface JudgeJobData {
   submissionId: string;
+  testMode?: 'sample' | 'full';
 }
 
 interface SubmissionTestResult {
@@ -35,6 +36,7 @@ interface TestCase {
   input: string;
   expected_output: string;
   ordinal: number;
+  is_sample?: boolean;
 }
 
 /**
@@ -122,16 +124,18 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
 
     const problem = problems[0];
 
-    // Fetch test cases in order
+    // FIX P0 BUG 8: Filter by is_sample when testMode is 'sample'
+    const testMode = job.data.testMode || 'full';
     const testCases = await sql<TestCase[]>`
-      SELECT id, input, expected_output, ordinal
+      SELECT id, input, expected_output, ordinal, is_sample
       FROM test_cases
       WHERE problem_id = ${problem.id}
+        ${testMode === 'sample' ? sql`AND is_sample = true` : sql``}
       ORDER BY ordinal ASC
     `;
 
     console.log(
-      `[Judge Worker] Judging submission ${submission.id} for problem ${problem.slug} (${testCases.length} tests)`
+      `[Judge Worker] Judging submission ${submission.id} for problem ${problem.slug} (${testCases.length} ${testMode} tests)`
     );
 
     const languageId = getJudge0LanguageId(submission.language);

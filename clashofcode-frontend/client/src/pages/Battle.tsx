@@ -99,7 +99,8 @@ export default function Battle() {
   // Validate matchId - if none provided, redirect to matchmaking
   const matchId = params?.matchId;
   
-  // FIX 2a: ALL HOOKS MUST BE CALLED UNCONDITIONALLY BEFORE ANY EARLY RETURNS
+  // FIX P0 BUG 1: Proper room ID resolution state
+  const [roomId, setRoomId] = useState<string | null>(null);
   const [runState, setRunState] = useState<"idle" | "running" | "passed" | "failed">("idle");
   const [language, setLanguage] = useState("typescript");
   const [code, setCode] = useState(starterCodes.typescript);
@@ -119,14 +120,71 @@ export default function Battle() {
     setCode(starterCodes[language] || starterCodes.typescript);
   }, [language]);
 
-  // Socket event handlers
+  // FIX P0 BUG 1: Resolve roomId from matchId via match-server
+  useEffect(() => {
+    if (!socket || !connected || !matchId || roomId) return;
+    
+    console.log(`[Battle] Resolving roomId for match ${matchId}`);
+    
+    // Request room state which will include the roomId
+    socket.emit("request_reconnect", { matchId, roomId: matchId });
+    
+    // Listen for room_state response
+    const handleRoomState = (payload: any) => {
+      console.log(`[Battle] Received room_state:`, payload);
+      if (payload.roomId) {
+        setRoomId(payload.roomId);
+      }
+      if (payload.endsAt) {
+        const remaining = payload.endsAt - Date.now();
+        setTimeRemainingMs(remaining > 0 ? remaining : 0);
+      }
+    };
+    
+    socket.on("room_state", handleRoomState);
+    
+    return () => {
+      socket.off("room_state", handleRoomState);
+    };
+  }, [socket, connected, matchId, roomId]);
+
+  // FIX P0 BUG 3: Implement reconnect flow on socket connect/reconnect
+  useEffect(() => {
+    if (!socket || !connected || !matchId) return;
+    
+    console.log(`[Battle] Socket connected, checking reconnect for match ${matchId}`);
+    
+    // If we already have roomId, emit reconnect immediately
+    if (roomId) {
+      console.log(`[Battle] Emitting reconnect for room ${roomId}, match ${matchId}`);
+      socket.emit("request_reconnect", { roomId, matchId });
+    }
+    
+    // Listen for match result
+    const handleMatchResult = (payload: any) => {
+      console.log(`[Battle] Match result received:`, payload);
+      // Navigate to result page
+      setTimeout(() => {
+        setLocation(`/result/${matchId}`);
+      }, 2000);
+    };
+    
+    socket.on("match_result", handleMatchResult);
+    
+    return () => {
+      socket.off("match_result", handleMatchResult);
+    };
+  }, [socket, connected, matchId, roomId, setLocation]);
+
+  // Socket event handlers for timer and submission results
   useEffect(() => {
     if (!socket) return;
     const handleTimer = (payload: {
       roomId: string;
       timeRemainingMs: number;
     }) => {
-      if (payload.roomId === matchId || payload.roomId === matchData?.roomId) {
+      // Match by roomId if we have it, otherwise by matchId
+      if (payload.roomId === roomId || payload.roomId === matchId) {
         setTimeRemainingMs(payload.timeRemainingMs);
       }
     };
@@ -168,7 +226,7 @@ export default function Battle() {
       socket.off("timer_sync", handleTimer as any);
       socket.off("submission_result", handleResult as any);
     };
-  }, [socket, matchId, matchData?.roomId]);
+  }, [socket, matchId, roomId]);
 
   // FIX 2a: CONDITIONAL RETURNS ONLY AFTER ALL HOOKS
   // Show message if no match ID is provided
@@ -217,24 +275,34 @@ export default function Battle() {
     initials: "RM",
     rating: 1856,
   };
-  const roomId = matchData?.roomId || matchId;
+  
+  // FIX P0 BUG 2: Use resolved roomId state and include matchId in payload
   const formatTime = (milliseconds: number | null) => {
     if (milliseconds === null) return "--:--";
     const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
     return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
   };
   
-  // FIX 2d: Pass selected language instead of hardcoded "typescript"
   const submitCode = (action: "run" | "submit" = "submit") => {
     if (!socket || !connected) return;
+    if (!roomId || !matchId) {
+      console.error("[Battle] Cannot submit: roomId or matchId not resolved");
+      setSubmissionStatus("Error: Room not ready. Please refresh.");
+      return;
+    }
+    
     setRunState("running");
     setSubmissionStatus(
       action === "run" ? "RUNNING SAMPLE TESTS..." : "SUBMITTED FOR JUDGING..."
     );
     setConsoleOutput(""); // Clear previous output
+    
+    console.log(`[Battle] Submitting code: roomId=${roomId}, matchId=${matchId}, action=${action}`);
+    
     socket.emit("submit_code", {
-      roomId,
-      language: language, // FIX: Use selected language
+      roomId,        // Resolved from match-server
+      matchId,       // FIX P0 BUG 2: Include matchId
+      language: language,
       sourceCode: code,
       action,
     });

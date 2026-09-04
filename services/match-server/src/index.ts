@@ -212,13 +212,22 @@ io.on("connection", (socket) => {
    */
   socket.on(SOCKET_EVENTS.SUBMIT_CODE, async (payload: SubmitCodePayload) => {
     try {
-      const { roomId, language, sourceCode, action } = payload;
+      // FIX P0 BUG 2: Validate both roomId AND matchId
+      const { roomId, matchId, language, sourceCode, action } = payload;
       const userId = socket.data.userId;
 
       if (!userId) {
         return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
           code: "NOT_AUTHENTICATED",
           message: "User not authenticated",
+        });
+      }
+
+      // Validate required fields
+      if (!roomId || !matchId) {
+        return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+          code: "INVALID_PAYLOAD",
+          message: "Both roomId and matchId are required",
         });
       }
 
@@ -230,6 +239,14 @@ io.on("connection", (socket) => {
         });
       }
 
+      // FIX P0 BUG 2: Verify matchId matches room's matchId
+      if (room.matchId !== matchId) {
+        return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+          code: "MATCH_MISMATCH",
+          message: "Room matchId does not match provided matchId",
+        });
+      }
+
       if (!room.playerIds.includes(userId)) {
         return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
           code: "NOT_IN_ROOM",
@@ -237,8 +254,20 @@ io.on("connection", (socket) => {
         });
       }
 
+      // Validate match is in correct phase
+      if (room.phase !== "active" && room.phase !== "judging") {
+        return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+          code: "INVALID_PHASE",
+          message: `Cannot submit during ${room.phase} phase`,
+        });
+      }
+
       const submissionId = uuidv4();
       const testMode = action === "run" ? "sample" : "full";
+
+      console.log(
+        `[Match Server] 📥 Submission from ${userId} in room ${roomId} (match ${matchId}): ${language}, mode: ${testMode}`
+      );
 
       // 1. Insert submission record into database
       await pool.query(
@@ -246,7 +275,7 @@ io.on("connection", (socket) => {
          VALUES ($1, $2, $3, $4, $5, $6, 'pending', 0, 0, NOW())`,
         [
           submissionId,
-          room.matchId,
+          matchId, // Use validated matchId
           userId,
           room.problemId,
           language,
@@ -273,7 +302,7 @@ io.on("connection", (socket) => {
       matchHandler.registerSubmission(submissionId, userId, roomId);
 
       console.log(
-        `[Match Server] 📥 Submission ${submissionId} created & enqueued for player ${userId} in room ${roomId} (${language}, mode: ${testMode})`
+        `[Match Server] ✅ Submission ${submissionId} created & enqueued for player ${userId}`
       );
 
       // 4. Acknowledge submission to submitter with pending status
@@ -426,7 +455,8 @@ io.on("connection", (socket) => {
     const userId = socket.data.userId;
     if (!userId) return;
 
-    matchHandler.unregisterSocket(userId);
+    // FIX P0 BUG 4: Pass socketId to prevent race condition
+    matchHandler.unregisterSocket(userId, socket.id);
 
     // Check all rooms for this player and mark them as disconnected
     for (const room of Array.from(matchHandler.getRooms().values())) {

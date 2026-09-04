@@ -64,10 +64,12 @@ export class MatchHandler {
 
     this.rooms.set(roomId, room);
 
+    const ttlSeconds = Math.ceil(durationMs / 1000) + 600; // duration + 10 min buffer
+
     // Persist to Redis for multi-instance support
     await this.redis.setex(
       `room:${roomId}`,
-      Math.ceil(durationMs / 1000) + 600, // cache for duration + 10 min buffer
+      ttlSeconds,
       JSON.stringify({
         roomId,
         matchId,
@@ -77,6 +79,10 @@ export class MatchHandler {
         createdAt: now,
       })
     );
+
+    // FIX P0 BUG 1: Create bidirectional match<->room mapping
+    await this.redis.setex(`match-room:${matchId}`, ttlSeconds, roomId);
+    await this.redis.setex(`room-match:${roomId}`, ttlSeconds, matchId);
 
     console.log(
       `[Match Handler] 📍 Created room ${roomId} for match ${matchId} with players ${playerIds.join(", ")}`
@@ -176,10 +182,18 @@ export class MatchHandler {
   }
 
   /**
-   * Unregister socket when user disconnects
+   * FIX P0 BUG 4: Safe unregister - only delete if socketId matches
+   * Prevents old socket disconnect from deleting new socket mapping
    */
-  unregisterSocket(userId: string): void {
-    this.userToSocket.delete(userId);
+  unregisterSocket(userId: string, socketId: string): void {
+    const currentSocketId = this.userToSocket.get(userId);
+    if (currentSocketId === socketId) {
+      this.userToSocket.delete(userId);
+    } else {
+      console.log(
+        `[Match Handler] Skipping unregister for ${userId}: socket ${socketId} is not current (current: ${currentSocketId})`
+      );
+    }
   }
 
   /**
@@ -187,6 +201,19 @@ export class MatchHandler {
    */
   getSocketForUser(userId: string): string | undefined {
     return this.userToSocket.get(userId);
+  }
+
+  /**
+   * FIX P0 BUG 1: Lookup roomId from matchId via Redis
+   */
+  async getRoomIdForMatch(matchId: string): Promise<string | null> {
+    try {
+      const roomId = await this.redis.get(`match-room:${matchId}`);
+      return roomId;
+    } catch (err) {
+      console.error(`[Match Handler] Error looking up roomId for match ${matchId}:`, err);
+      return null;
+    }
   }
 
   /**
@@ -216,11 +243,19 @@ export class MatchHandler {
     // Remove room from memory
     this.rooms.delete(roomId);
 
-    // Remove from Redis
+    // Remove from Redis (including bidirectional mappings)
     this.redis.del(`room:${roomId}`).catch((err: unknown) => {
       console.error(`[Match Handler] Error deleting Redis room ${roomId}:`, err);
     });
+    
+    // FIX P0 BUG 1: Clean up match<->room mappings
+    this.redis.del(`match-room:${room.matchId}`).catch((err: unknown) => {
+      console.error(`[Match Handler] Error deleting match-room mapping:`, err);
+    });
+    this.redis.del(`room-match:${roomId}`).catch((err: unknown) => {
+      console.error(`[Match Handler] Error deleting room-match mapping:`, err);
+    });
 
-    console.log(`[Match Handler] 🗑️  Cleaned up room ${roomId}`);
+    console.log(`[Match Handler] 🗑️  Cleaned up room ${roomId} and mappings`);
   }
 }
