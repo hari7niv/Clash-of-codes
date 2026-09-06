@@ -5,7 +5,7 @@ import { createRoom } from "../../repositories/room.repo.js";
 import { db } from "../../db/client.js";
 import { friendships, users } from "../../db/schema/users.js";
 import { matches } from "../../db/schema/matches.js";
-import { eq, and, or, sql, like, ilike } from "drizzle-orm";
+import { eq, and, or, sql, like, ilike, inArray, ne } from "drizzle-orm";
 
 const friendRequestSchema = z.object({
   handle: z.string(),
@@ -35,70 +35,89 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
     const { id: userId } = request.user as { id: string };
     const body = friendSearchSchema.parse(request.body);
     
-    // Search users by username (case-insensitive partial match)
-    const searchResults = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        rating: users.rating,
-      })
-      .from(users)
-      .where(
-        and(
-          ilike(users.username, `%${body.query}%`),
-          sql`${users.id} != ${userId}::uuid` // Exclude current user
-        )
-      )
-      .limit(10);
-    
-    if (searchResults.length === 0) {
-      return [];
-    }
-    
-    // Check existing friendships for all found users
-    const userIds = searchResults.map(u => u.id);
-    const existingFriendships = await db
-      .select()
-      .from(friendships)
-      .where(
-        or(
+    try {
+      // FIX P0 BUG: Safe parameterized search without fragile UUID array SQL
+      // Search users by username (case-insensitive partial match)
+      const searchResults = await db
+        .select({
+          id: users.id,
+          username: users.username,
+          rating: users.rating,
+        })
+        .from(users)
+        .where(
           and(
-            eq(friendships.userId, userId),
-            sql`${friendships.friendId} = ANY(${userIds}::uuid[])`
-          ),
-          and(
-            eq(friendships.friendId, userId),
-            sql`${friendships.userId} = ANY(${userIds}::uuid[])`
+            ilike(users.username, `%${body.query}%`),
+            ne(users.id, userId) // Exclude current user
           )
         )
-      );
-    
-    // Create a map of user ID to friendship status
-    const friendshipMap = new Map<string, string>();
-    existingFriendships.forEach(f => {
-      const otherUserId = f.userId === userId ? f.friendId : f.userId;
-      friendshipMap.set(otherUserId, f.status);
-    });
-    
-    // Filter out users who are already friends or have pending requests
-    const availableUsers = searchResults.filter(u => !friendshipMap.has(u.id));
-    
-    // Map to public user format
-    return availableUsers.map(u => {
-      const ratingInt = Math.round(u.rating);
-      return {
-        id: u.id,
-        username: u.username,
-        handle: u.username,
-        rating: ratingInt,
-        rank: ratingInt >= 2400 ? "Grandmaster" : 
-              ratingInt >= 2100 ? "Master" :
-              ratingInt >= 1800 ? "Diamond" :
-              ratingInt >= 1500 ? "Platinum" :
-              ratingInt >= 1200 ? "Gold" :
-              ratingInt >= 900 ? "Silver" : "Bronze",
-      };
-    });
+        .limit(10);
+      
+      if (searchResults.length === 0) {
+        return [];
+      }
+      
+      // Check existing friendships for all found users
+      // Use two separate queries instead of fragile ANY(array) syntax
+      const userIds = searchResults.map(u => u.id);
+      
+      const outgoingFriendships = await db
+        .select()
+        .from(friendships)
+        .where(
+          and(
+            eq(friendships.userId, userId),
+            inArray(friendships.friendId, userIds)
+          )
+        );
+      
+      const incomingFriendships = await db
+        .select()
+        .from(friendships)
+        .where(
+          and(
+            eq(friendships.friendId, userId),
+            inArray(friendships.userId, userIds)
+          )
+        );
+      
+      // Create a map of user ID to friendship status
+      const friendshipMap = new Map<string, string>();
+      outgoingFriendships.forEach(f => {
+        friendshipMap.set(f.friendId, f.status);
+      });
+      incomingFriendships.forEach(f => {
+        friendshipMap.set(f.userId, f.status);
+      });
+      
+      // Filter out users who are already friends or have pending requests
+      const availableUsers = searchResults.filter(u => !friendshipMap.has(u.id));
+      
+      // Map to public user format
+      return availableUsers.map(u => {
+        const ratingInt = Math.round(u.rating);
+        return {
+          id: u.id,
+          username: u.username,
+          handle: u.username,
+          rating: ratingInt,
+          rank: ratingInt >= 2400 ? "Grandmaster" : 
+                ratingInt >= 2100 ? "Master" :
+                ratingInt >= 1800 ? "Diamond" :
+                ratingInt >= 1500 ? "Platinum" :
+                ratingInt >= 1200 ? "Gold" :
+                ratingInt >= 900 ? "Silver" : "Bronze",
+        };
+      });
+    } catch (err: any) {
+      console.error("[Social Routes] Friend search error:", err);
+      return reply.code(500).send({ 
+        error: { 
+          code: "SEARCH_FAILED", 
+          message: err.message || "Failed to search users" 
+        } 
+      });
+    }
   });
 
   // Get pending friend requests (where current user is recipient)

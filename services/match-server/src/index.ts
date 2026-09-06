@@ -21,6 +21,8 @@ import type {
   PublicUser,
 } from "@clashofcode/shared";
 import { SOCKET_EVENTS, computeMatchRatings } from "@clashofcode/shared";
+import { createSubmission } from "./services/submission-service.js";
+import { completeMatch } from "./services/match-completion.js";
 
 dotenv.config();
 
@@ -262,50 +264,37 @@ io.on("connection", (socket) => {
         });
       }
 
-      const submissionId = uuidv4();
-      const testMode = action === "run" ? "sample" : "full";
-
       console.log(
-        `[Match Server] 📥 Submission from ${userId} in room ${roomId} (match ${matchId}): ${language}, mode: ${testMode}`
+        `[Match Server] 📥 Submission from ${userId} in room ${roomId} (match ${matchId}): ${language}, action: ${action}`
       );
 
-      // 1. Insert submission record into database
-      await pool.query(
-        `INSERT INTO submissions (id, match_id, user_id, problem_id, language, source_code, verdict, passed_tests, total_tests, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'pending', 0, 0, NOW())`,
-        [
-          submissionId,
-          matchId, // Use validated matchId
-          userId,
-          room.problemId,
-          language,
-          sourceCode,
-        ]
-      );
-
-      // 2. Enqueue job on BullMQ judge queue
-      const judgeQueue = new Queue(JUDGE_QUEUE_NAME, {
-        connection: {
-          url: REDIS_URL,
-        },
-      });
-
-      await judgeQueue.add(`judge-${submissionId}`, {
-        submissionId,
-        testMode,
+      // FIX P0 BUG 7: Use shared submission service (single source of truth)
+      const result = await createSubmission({
+        matchId,
+        userId,
+        problemId: room.problemId,
+        language,
+        sourceCode,
         action: action || "submit",
       });
 
-      await judgeQueue.close();
+      if (!result.success) {
+        return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+          code: result.errorCode || "SUBMISSION_FAILED",
+          message: result.error || "Failed to create submission",
+        });
+      }
 
-      // 3. Register submission in matchHandler for verdict bridge routing
+      const submissionId = result.submissionId!;
+
+      // Register submission in matchHandler for verdict bridge routing
       matchHandler.registerSubmission(submissionId, userId, roomId);
 
       console.log(
         `[Match Server] ✅ Submission ${submissionId} created & enqueued for player ${userId}`
       );
 
-      // 4. Acknowledge submission to submitter with pending status
+      // Acknowledge submission to submitter with pending status
       socket.emit(SOCKET_EVENTS.SUBMISSION_RESULT, {
         roomId,
         submissionId,
@@ -324,8 +313,87 @@ io.on("connection", (socket) => {
   });
 
   /**
+   * FIX P0 BUG 1: NEW EVENT - resolve_match_room
+   * Client provides matchId to get roomId (breaks circular dependency)
+   */
+  socket.on("resolve_match_room", async (payload: { matchId: string }) => {
+    try {
+      const { matchId } = payload;
+      const userId = socket.data.userId;
+
+      if (!userId) {
+        return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+          code: "NOT_AUTHENTICATED",
+          message: "User not authenticated",
+        });
+      }
+
+      if (!matchId) {
+        return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+          code: "INVALID_PAYLOAD",
+          message: "matchId is required",
+        });
+      }
+
+      console.log(
+        `[Match Server] Player ${userId} resolving roomId for match ${matchId}`
+      );
+
+      // Verify user is participant in this match
+      const matchRes = await pool.query(
+        "SELECT id, player_one_id, player_two_id, status FROM matches WHERE id = $1",
+        [matchId]
+      );
+
+      if (matchRes.rows.length === 0) {
+        return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+          code: "MATCH_NOT_FOUND",
+          message: "Match not found",
+        });
+      }
+
+      const match = matchRes.rows[0];
+      const isParticipant = match.player_one_id === userId || match.player_two_id === userId;
+
+      if (!isParticipant) {
+        return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+          code: "NOT_AUTHORIZED",
+          message: "You are not a participant in this match",
+        });
+      }
+
+      // Lookup roomId from Redis
+      const roomId = await matchHandler.getRoomIdForMatch(matchId);
+      
+      if (!roomId) {
+        return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+          code: "ROOM_NOT_FOUND",
+          message: "Room mapping not found for this match",
+        });
+      }
+
+      console.log(
+        `[Match Server] ✅ Resolved match ${matchId} -> room ${roomId}`
+      );
+
+      // Emit room mapping to client
+      socket.emit("match_room_resolved", {
+        matchId,
+        roomId,
+      });
+    } catch (err: any) {
+      console.error(`[Match Server] Error in resolve_match_room:`, err.message);
+      socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+        code: "RESOLVE_FAILED",
+        message: err.message,
+      });
+    }
+  });
+
+  /**
    * CANONICAL EVENT: request_reconnect
    * Client requests room state after a disconnect/reconnect
+   * NOW requires actual roomId (not matchId)
    */
   socket.on(SOCKET_EVENTS.REQUEST_RECONNECT, async (payload: RequestReconnectPayload) => {
     try {
@@ -478,32 +546,42 @@ io.on("connection", (socket) => {
               await matchHandler.transitionPhase(room.roomId, "completed");
 
               if (winnerId) {
-                // Update match with winner (forfeit)
+                // FIX P0 BUG 5 + 6: Use completeMatch service with forfeit reason
                 try {
-                  await pool.query(
-                    "UPDATE matches SET status = 'completed', winner_id = $1, ended_at = NOW() WHERE id = $2",
-                    [winnerId, room.matchId]
-                  );
-                  
-                  // Call match completion for rating updates
-                  const playerOneId = room.playerIds[0];
-                  const playerTwoId = room.playerIds[1] || null;
-                  await completeMatchAndRatings(room.matchId, playerOneId, playerTwoId);
+                  const result = await completeMatch({
+                    matchId: room.matchId,
+                    reason: "forfeit",
+                    forcedWinnerId: winnerId, // Opponent wins by forfeit
+                  });
 
-                  console.log(
-                    `[Match Server] 🏆 Match ${room.matchId} completed by forfeit. Winner: ${winnerId}`
-                  );
+                  if (result.success) {
+                    console.log(
+                      `[Match Server] 🏆 Match ${room.matchId} completed by forfeit. Winner: ${winnerId}`
+                    );
 
-                  // Emit match_result to winner socket
-                  const winnerSocketId = matchHandler.getSocketForUser(winnerId);
-                  if (winnerSocketId) {
-                    io.to(winnerSocketId).emit(SOCKET_EVENTS.MATCH_RESULT, {
-                      roomId: room.roomId,
-                      matchId: room.matchId,
-                      winnerId,
-                      you: { ratingBefore: 0, ratingAfter: 0, delta: 0 }, // Forfeit win - no rating change
-                      reason: "opponent_disconnect",
-                    });
+                    // Emit match_result to winner socket
+                    const winnerSocketId = matchHandler.getSocketForUser(winnerId);
+                    if (winnerSocketId) {
+                      const winnerRating = result.ratingChanges?.playerOne?.before === result.ratingChanges?.playerOne?.after 
+                        ? result.ratingChanges?.playerTwo 
+                        : result.ratingChanges?.playerOne;
+                      
+                      io.to(winnerSocketId).emit(SOCKET_EVENTS.MATCH_RESULT, {
+                        roomId: room.roomId,
+                        matchId: room.matchId,
+                        winnerId,
+                        you: winnerRating
+                          ? {
+                              ratingBefore: winnerRating.before,
+                              ratingAfter: winnerRating.after,
+                              delta: winnerRating.delta,
+                            }
+                          : { ratingBefore: 0, ratingAfter: 0, delta: 0 },
+                        reason: "opponent_disconnect",
+                      });
+                    }
+                  } else {
+                    console.error("[Match Server] Forfeit completion failed:", result.error);
                   }
                 } catch (forfeitErr) {
                   console.error("[Match Server] Error in forfeit resolution:", forfeitErr);
@@ -544,9 +622,6 @@ let cleanupMatchmaking: (() => void) | null = null;
   }
 })();
 
-// Import match completion service
-import { completeMatch as completeMatchAndRatings } from "./services/match-completion.js";
-
 // Server-authoritative timer: Broadcast timer_sync every 100ms to all active rooms
 const timerInterval = setInterval(() => {
   const now = Date.now();
@@ -566,19 +641,41 @@ const timerInterval = setInterval(() => {
 
     if (timeRemaining <= 0 && room.phase === "active") {
       matchHandler.transitionPhase(room.roomId, "judging").then(async () => {
-        // After transitioning to judging, complete the match and calculate ratings
+        // FIX P0 BUG 5: Use completeMatch with time_expired reason
         console.log(`[Match Server] Time expired for room ${room.roomId}, completing match...`);
         
-        const playerOneId = room.playerIds[0];
-        const playerTwoId = room.playerIds[1] || null;
+        const result = await completeMatch({
+          matchId: room.matchId,
+          reason: "time_expired",
+        });
         
-        await completeMatchAndRatings(room.matchId, playerOneId, playerTwoId);
-        
-        // Transition to completed phase
-        await matchHandler.transitionPhase(room.roomId, "completed");
-        
-        // TODO: Emit match_result to both players with rating updates
-        // This requires fetching the rating history from the database
+        if (result.success) {
+          // Transition to completed phase
+          await matchHandler.transitionPhase(room.roomId, "completed");
+          
+          // Emit match_result to both players with rating updates
+          for (const playerId of room.playerIds) {
+            const socketId = matchHandler.getSocketForUser(playerId);
+            if (socketId) {
+              const isPlayerOne = playerId === room.playerIds[0];
+              const ratingChange = isPlayerOne ? result.ratingChanges?.playerOne : result.ratingChanges?.playerTwo;
+              
+              io.to(socketId).emit(SOCKET_EVENTS.MATCH_RESULT, {
+                roomId: room.roomId,
+                matchId: room.matchId,
+                winnerId: result.winnerId || null,
+                you: ratingChange ? {
+                  ratingBefore: ratingChange.before,
+                  ratingAfter: ratingChange.after,
+                  delta: ratingChange.delta,
+                } : { ratingBefore: 0, ratingAfter: 0, delta: 0 },
+                reason: "time_expired",
+              });
+            }
+          }
+        } else {
+          console.error(`[Match Server] Error completing room ${room.roomId}:`, result.error);
+        }
       }).catch((err) => {
         console.error(`[Match Server] Error completing room ${room.roomId}:`, err);
       });
@@ -617,3 +714,4 @@ const shutdown = async () => {
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+

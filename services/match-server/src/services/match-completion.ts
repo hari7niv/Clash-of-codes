@@ -1,14 +1,29 @@
 /**
  * Match completion service - finalizes matches and calculates rating updates
+ * FIX P0 BUG 5 + 6: Single authoritative match completion with idempotency
  */
 
 import { pool } from "../db/client.js";
 import { computeMatchRatings } from "@clashofcode/shared";
 
+export type MatchCompletionReason =
+  | "forfeit"
+  | "accepted_solution"
+  | "time_expired"
+  | "manual"
+  | "abandoned";
+
+export interface CompleteMatchOptions {
+  matchId: string;
+  reason: MatchCompletionReason;
+  forcedWinnerId?: string | null; // For forfeit: opponent must win
+}
+
 export interface MatchCompletionResult {
   success: boolean;
   matchId: string;
   winnerId?: string;
+  reason: MatchCompletionReason;
   ratingChanges?: {
     playerOne: { before: number; after: number; delta: number };
     playerTwo?: { before: number; after: number; delta: number };
@@ -19,17 +34,22 @@ export interface MatchCompletionResult {
 /**
  * Determines the winner based on submissions
  * Priority: First to AC > Most tests passed > First submission
+ * CRITICAL: Only considers competitive submissions (excludes test runs)
  */
-export async function determineWinner(
+async function determineWinner(
   matchId: string,
   playerOneId: string,
-  playerTwoId: string
+  playerTwoId: string,
+  client: any // pg client for transaction consistency
 ): Promise<string | null> {
   try {
-    const result = await pool.query(
+    // FIX CRITICAL BUG: Only consider competitive submissions for winner determination
+    const result = await client.query(
       `SELECT user_id, verdict, passed_tests, total_tests, created_at
        FROM submissions
-       WHERE match_id = $1 AND user_id IN ($2, $3)
+       WHERE match_id = $1 
+         AND user_id IN ($2, $3)
+         AND submission_type = 'competitive'
        ORDER BY 
          CASE WHEN verdict = 'accepted' THEN 0 ELSE 1 END,
          passed_tests DESC,
@@ -79,24 +99,104 @@ export async function determineWinner(
 }
 
 /**
- * Complete a match and trigger rating calculation
+ * FIX P0 BUG 5 + 6: Single authoritative match completion
+ * Idempotent operation - can be called multiple times safely
+ * Handles: forfeit, accepted solution, time expiry, manual completion
  */
 export async function completeMatch(
-  matchId: string,
-  playerOneId: string,
-  playerTwoId: string | null
+  options: CompleteMatchOptions
 ): Promise<MatchCompletionResult> {
+  const { matchId, reason, forcedWinnerId } = options;
   const client = await pool.connect();
   
   try {
     await client.query("BEGIN");
     
-    console.log(`[Match Completion] Completing match ${matchId}...`);
+    console.log(`[Match Completion] Completing match ${matchId} (reason: ${reason})...`);
 
-    // Determine winner
-    const winnerId = playerTwoId 
-      ? await determineWinner(matchId, playerOneId, playerTwoId)
-      : null;
+    // Check if already completed (idempotency)
+    const matchCheck = await client.query(
+      "SELECT id, status, winner_id, player_one_id, player_two_id FROM matches WHERE id = $1 FOR UPDATE",
+      [matchId]
+    );
+
+    if (matchCheck.rows.length === 0) {
+      throw new Error("Match not found");
+    }
+
+    const match = matchCheck.rows[0];
+    
+    // If already completed, return existing result
+    if (match.status === "completed") {
+      console.log(`[Match Completion] Match ${matchId} already completed with winner ${match.winner_id}`);
+      await client.query("COMMIT");
+      
+      // Fetch existing rating history
+      const historyRes = await pool.query(
+        `SELECT user_id, rating_before, rating_after, delta 
+         FROM ratings_history 
+         WHERE match_id = $1 
+         ORDER BY user_id`,
+        [matchId]
+      );
+
+      const ratingChanges: any = {};
+      if (historyRes.rows.length >= 1) {
+        const p1 = historyRes.rows.find((r: any) => r.user_id === match.player_one_id);
+        if (p1) {
+          ratingChanges.playerOne = {
+            before: Math.round(p1.rating_before),
+            after: Math.round(p1.rating_after),
+            delta: Math.round(p1.delta),
+          };
+        }
+      }
+      if (historyRes.rows.length >= 2 && match.player_two_id) {
+        const p2 = historyRes.rows.find((r: any) => r.user_id === match.player_two_id);
+        if (p2) {
+          ratingChanges.playerTwo = {
+            before: Math.round(p2.rating_before),
+            after: Math.round(p2.rating_after),
+            delta: Math.round(p2.delta),
+          };
+        }
+      }
+
+      return {
+        success: true,
+        matchId,
+        winnerId: match.winner_id || undefined,
+        reason,
+        ratingChanges: Object.keys(ratingChanges).length > 0 ? ratingChanges : undefined,
+      };
+    }
+
+    const playerOneId = match.player_one_id;
+    const playerTwoId = match.player_two_id;
+
+    // Determine winner based on completion reason
+    let winnerId: string | null = null;
+
+    if (reason === "forfeit") {
+      // FIX P0 BUG 6: For forfeit, forcedWinnerId MUST be honored
+      if (!forcedWinnerId) {
+        throw new Error("forcedWinnerId is required for forfeit completion");
+      }
+      winnerId = forcedWinnerId;
+      console.log(`[Match Completion] Forfeit: Winner set to ${winnerId}`);
+    } else if (reason === "accepted_solution" || reason === "time_expired") {
+      // Determine winner from submissions
+      winnerId = playerTwoId 
+        ? await determineWinner(matchId, playerOneId, playerTwoId, client)
+        : null;
+      console.log(`[Match Completion] ${reason}: Winner determined as ${winnerId || "draw"}`);
+    } else if (reason === "manual" || reason === "abandoned") {
+      // For manual/abandoned, use forcedWinnerId if provided, otherwise determine from submissions
+      winnerId = forcedWinnerId !== undefined 
+        ? forcedWinnerId 
+        : (playerTwoId ? await determineWinner(matchId, playerOneId, playerTwoId, client) : null);
+      console.log(`[Match Completion] ${reason}: Winner is ${winnerId || "draw"}`);
+    }
 
     // Update match record
     await client.query(
@@ -111,11 +211,12 @@ export async function completeMatch(
     // Only calculate ratings for ranked matches with two players
     if (!playerTwoId) {
       await client.query("COMMIT");
-      console.log(`[Match Completion] ✅ Match ${matchId} completed (solo/practice mode)`);
+      console.log(`[Match Completion] ✅ Match ${matchId} completed (solo/practice mode, no ratings)`);
       return {
         success: true,
         matchId,
         winnerId: winnerId || undefined,
+        reason,
       };
     }
 
@@ -225,13 +326,14 @@ export async function completeMatch(
     await client.query("COMMIT");
 
     console.log(
-      `[Match Completion] ✅ Match ${matchId} completed. Winner: ${winnerId || "Draw"}. Rating changes: P1 ${playerOneDelta >= 0 ? "+" : ""}${Math.round(playerOneDelta)}, P2 ${playerTwoDelta >= 0 ? "+" : ""}${Math.round(playerTwoDelta)}`
+      `[Match Completion] ✅ Match ${matchId} completed (${reason}). Winner: ${winnerId || "Draw"}. Rating changes: P1 ${playerOneDelta >= 0 ? "+" : ""}${Math.round(playerOneDelta)}, P2 ${playerTwoDelta >= 0 ? "+" : ""}${Math.round(playerTwoDelta)}`
     );
 
     return {
       success: true,
       matchId,
       winnerId: winnerId || undefined,
+      reason,
       ratingChanges: {
         playerOne: {
           before: Math.round(playerOne.rating),
@@ -251,6 +353,7 @@ export async function completeMatch(
     return {
       success: false,
       matchId,
+      reason,
       error: err.message || "Unknown error",
     };
   } finally {

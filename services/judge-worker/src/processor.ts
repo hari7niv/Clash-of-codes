@@ -14,6 +14,9 @@ interface SubmissionTestResult {
   testIndex: number;
   passed: boolean;
   details?: string;
+  stdout?: string;
+  stderr?: string;
+  compileOutput?: string;
 }
 
 interface Submission {
