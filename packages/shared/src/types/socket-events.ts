@@ -36,6 +36,10 @@ export interface RequestReconnectPayload {
   matchId: string;
 }
 
+export interface ResolveMatchRoomPayload {
+  matchId: string;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Server -> Client                                                            */
 /* -------------------------------------------------------------------------- */
@@ -77,6 +81,9 @@ export interface SubmissionResultPayload {
   passedTests: number;
   totalTests: number;
   runtimeMs: number | null;
+  stdout?: string;
+  stderr?: string;
+  compileOutput?: string;
 }
 
 export interface MatchResultPayload {
@@ -99,6 +106,11 @@ export interface RoomStatePayload {
   endsAt: number | null;
 }
 
+export interface MatchRoomResolvedPayload {
+  matchId: string;
+  roomId: string;
+}
+
 export interface ErrorPayload {
   code: string;
   message: string;
@@ -113,6 +125,7 @@ export interface ClientToServerEvents {
   leave_queue: (payload: LeaveQueuePayload) => void;
   submit_code: (payload: SubmitCodePayload) => void;
   request_reconnect: (payload: RequestReconnectPayload) => void;
+  resolve_match_room: (payload: ResolveMatchRoomPayload) => void;
 }
 
 export interface ServerToClientEvents {
@@ -124,6 +137,7 @@ export interface ServerToClientEvents {
   submission_result: (payload: SubmissionResultPayload) => void;
   match_result: (payload: MatchResultPayload) => void;
   room_state: (payload: RoomStatePayload) => void;
+  match_room_resolved: (payload: MatchRoomResolvedPayload) => void;
   error_event: (payload: ErrorPayload) => void;
 }
 
