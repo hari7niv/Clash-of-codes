@@ -18,6 +18,9 @@ importers:
       cross-env:
         specifier: ^10.1.0
         version: 10.1.0
+      esbuild:
+        specifier: ^0.25.12
+        version: 0.25.12
       rimraf:
         specifier: ^6.0.1
         version: 6.1.3

@@ -5,7 +5,7 @@ import { createRoom } from "../../repositories/room.repo.js";
 import { db } from "../../db/client.js";
 import { friendships, users } from "../../db/schema/users.js";
 import { matches } from "../../db/schema/matches.js";
-import { eq, and, or, sql, like, ilike } from "drizzle-orm";
+import { eq, and, or, sql, like, ilike, inArray } from "drizzle-orm";
 
 const friendRequestSchema = z.object({
   handle: z.string(),
@@ -64,11 +64,11 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
         or(
           and(
             eq(friendships.userId, userId),
-            sql`${friendships.friendId} = ANY(${userIds}::uuid[])`
+            inArray(friendships.friendId, userIds)
           ),
           and(
             eq(friendships.friendId, userId),
-            sql`${friendships.userId} = ANY(${userIds}::uuid[])`
+            inArray(friendships.userId, userIds)
           )
         )
       );

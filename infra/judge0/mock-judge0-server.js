@@ -27,6 +27,7 @@ const LANGUAGES = {
   50: { name: 'C (GCC 9.2.0)', cmd: 'gcc', ext: 'c', compile: true },
   54: { name: 'C++ (GCC 9.2.0)', cmd: 'g++', ext: 'cpp', compile: true },
   62: { name: 'Java (OpenJDK 13.0.1)', cmd: 'javac', ext: 'java', compile: true },
+  74: { name: 'TypeScript', cmd: 'node --experimental-strip-types', ext: 'ts' },
 };
 
 function generateToken() {

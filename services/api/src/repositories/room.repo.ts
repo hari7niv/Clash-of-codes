@@ -1,5 +1,5 @@
 import { db } from "../db/client.js";
-import { rooms, roomMembers } from "../db/schema/matches.js";
+import { rooms, roomMembers, matches } from "../db/schema/matches.js";
 import { users } from "../db/schema/users.js";
 import { eq, and } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
@@ -52,6 +52,8 @@ export const createRoom = async (data: {
       await tx.insert(roomMembers).values({
         roomId: newRoom.id,
         userId: data.hostUserId,
+        ready: true,
+        joinedAt: new Date(),
       });
 
       return newRoom;
@@ -82,8 +84,23 @@ export const getRoomByCode = async (code: string) => {
     .innerJoin(users, eq(roomMembers.userId, users.id))
     .where(eq(roomMembers.roomId, room.id));
 
+  let matchId = undefined;
+  if (room.status === "in_progress") {
+    const [latestMatch] = await db
+      .select({ id: matches.id })
+      .from(matches)
+      .where(eq(matches.roomCode, code))
+      .orderBy(matches.createdAt);
+    
+    if (latestMatch) {
+      matchId = latestMatch.id;
+    }
+  }
+
   return {
     code: room.code,
+    status: room.status,
+    matchId,
     mode: room.isPrivate ? "solo" as const : "arena" as const,
     capacity: room.maxPlayers,
     battleType: room.timeControl,
@@ -135,6 +152,8 @@ export const joinRoom = async (code: string, userId: string) => {
       await tx.insert(roomMembers).values({
         roomId: room.id,
         userId,
+        ready: false,
+        joinedAt: new Date(),
       });
     }
 

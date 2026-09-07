@@ -4,6 +4,8 @@ import { Redis } from "ioredis";
 import { Queue } from "bullmq";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 import { v4 as uuidv4 } from "uuid";
 import { listenToMatchQueue } from "./services/queue-listener.js";
 import { MatchHandler } from "./services/match-handler.js";
@@ -22,12 +24,13 @@ import type {
 } from "@clashofcode/shared";
 import { SOCKET_EVENTS, computeMatchRatings } from "@clashofcode/shared";
 
-dotenv.config();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
 const PORT = parseInt(process.env.PORT || "4100", 10);
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret-dev-key";
-const JUDGE_QUEUE_NAME = process.env.JUDGE_QUEUE_NAME || "judge_submissions";
+const JUDGE_QUEUE_NAME = process.env.JUDGE_QUEUE_NAME || "judge";
 
 const httpServer = createServer();
 const io = new Server<ClientToServerEvents, ServerToClientEvents, {}, SocketData>(
@@ -224,14 +227,29 @@ io.on("connection", (socket) => {
       }
 
       // Validate required fields
-      if (!roomId || !matchId) {
+      if (!roomId && !matchId) {
         return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
           code: "INVALID_PAYLOAD",
-          message: "Both roomId and matchId are required",
+          message: "Either roomId or matchId is required",
         });
       }
 
-      const room = matchHandler.getRoom(roomId);
+      let activeRoomId = roomId;
+      
+      // If no roomId provided, try to resolve it from matchId
+      if (!activeRoomId && matchId) {
+        const resolvedRoomId = await matchHandler.getRoomIdForMatch(matchId);
+        if (resolvedRoomId) {
+          activeRoomId = resolvedRoomId;
+        } else {
+          return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+            code: "ROOM_NOT_FOUND",
+            message: "Could not find active room for this match",
+          });
+        }
+      }
+
+      const room = matchHandler.getRoom(activeRoomId);
       if (!room) {
         return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
           code: "ROOM_NOT_FOUND",
@@ -240,7 +258,7 @@ io.on("connection", (socket) => {
       }
 
       // FIX P0 BUG 2: Verify matchId matches room's matchId
-      if (room.matchId !== matchId) {
+      if (matchId && room.matchId !== matchId) {
         return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
           code: "MATCH_MISMATCH",
           message: "Room matchId does not match provided matchId",
@@ -266,7 +284,7 @@ io.on("connection", (socket) => {
       const testMode = action === "run" ? "sample" : "full";
 
       console.log(
-        `[Match Server] 📥 Submission from ${userId} in room ${roomId} (match ${matchId}): ${language}, mode: ${testMode}`
+        `[Match Server] 📥 Submission from ${userId} in room ${activeRoomId} (match ${matchId}): ${language}, mode: ${testMode}`
       );
 
       // 1. Insert submission record into database
@@ -299,7 +317,7 @@ io.on("connection", (socket) => {
       await judgeQueue.close();
 
       // 3. Register submission in matchHandler for verdict bridge routing
-      matchHandler.registerSubmission(submissionId, userId, roomId);
+      matchHandler.registerSubmission(submissionId, userId, activeRoomId);
 
       console.log(
         `[Match Server] ✅ Submission ${submissionId} created & enqueued for player ${userId}`
@@ -329,7 +347,7 @@ io.on("connection", (socket) => {
    */
   socket.on(SOCKET_EVENTS.REQUEST_RECONNECT, async (payload: RequestReconnectPayload) => {
     try {
-      const { roomId } = payload;
+      let { roomId, matchId } = payload;
       const userId = socket.data.userId;
 
       if (!userId) {
@@ -337,6 +355,29 @@ io.on("connection", (socket) => {
           code: "NOT_AUTHENTICATED",
           message: "User not authenticated",
         });
+      }
+
+      // FIX: If roomId not provided or invalid, resolve from matchId
+      if (!roomId || roomId === matchId) {
+        if (!matchId) {
+          return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+            code: "INVALID_PAYLOAD",
+            message: "Must provide either roomId or matchId",
+          });
+        }
+        
+        console.log(`[Match Server] Resolving roomId from matchId ${matchId} for user ${userId}`);
+        const resolvedRoomId = await matchHandler.getRoomIdForMatch(matchId);
+        
+        if (!resolvedRoomId) {
+          return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+            code: "ROOM_NOT_FOUND",
+            message: "Room not found for this match. It may have ended.",
+          });
+        }
+        
+        roomId = resolvedRoomId;
+        console.log(`[Match Server] Resolved matchId ${matchId} → roomId ${roomId}`);
       }
 
       console.log(

@@ -31,6 +31,8 @@ export function useRoomData(roomCode: string | null) {
     }
 
     fetchData();
+    const interval = setInterval(fetchData, 2000);
+    return () => clearInterval(interval);
   }, [roomCode]);
 
   const joinRoom = async (code: string) => {

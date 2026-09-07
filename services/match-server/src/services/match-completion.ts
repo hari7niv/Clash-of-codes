@@ -5,6 +5,21 @@
 import { pool } from "../db/client.js";
 import { computeMatchRatings } from "@clashofcode/shared";
 
+export type MatchCompletionReason =
+  | "forfeit"
+  | "accepted_solution"
+  | "time_expired"
+  | "manual"
+  | "abandoned";
+
+export interface CompleteMatchOptions {
+  matchId: string;
+  playerOneId: string;
+  playerTwoId: string | null;
+  reason: MatchCompletionReason;
+  forcedWinnerId?: string | null;
+}
+
 export interface MatchCompletionResult {
   success: boolean;
   matchId: string;

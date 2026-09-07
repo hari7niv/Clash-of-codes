@@ -77,6 +77,10 @@ export interface SubmissionResultPayload {
   passedTests: number;
   totalTests: number;
   runtimeMs: number | null;
+  stdout?: string;
+  stderr?: string;
+  compileOutput?: string;
+  testResults?: any[];
 }
 
 export interface MatchResultPayload {

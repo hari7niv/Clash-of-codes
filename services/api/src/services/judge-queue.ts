@@ -1,7 +1,13 @@
 import { Queue } from "bullmq";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../../../../.env") });
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
-const JUDGE_QUEUE_NAME = process.env.JUDGE_QUEUE_NAME || "judge_submissions";
+const JUDGE_QUEUE_NAME = process.env.JUDGE_QUEUE_NAME || "judge";
 
 let judgeQueue: Queue | null = null;
 

@@ -1,7 +1,6 @@
 import axios, { AxiosError } from "axios";
 
-const JUDGE0_URL = process.env.JUDGE0_URL || "http://localhost:2358";
-const JUDGE0_API_KEY = process.env.JUDGE0_API_KEY || "";
+
 
 interface Judge0Submission {
   language_id: number;
@@ -30,16 +29,29 @@ export class Judge0Client {
   private baseUrl: string;
   private apiKey: string;
 
-  constructor(baseUrl = JUDGE0_URL, apiKey = JUDGE0_API_KEY) {
-    this.baseUrl = baseUrl;
-    this.apiKey = apiKey;
+  constructor(baseUrl?: string, apiKey?: string) {
+    this.baseUrl = baseUrl || process.env.JUDGE0_URL || "http://localhost:2358";
+    this.apiKey = apiKey || process.env.JUDGE0_API_KEY || "";
   }
 
   async submit(submission: Judge0Submission): Promise<{ token: string }> {
     try {
+      let memoryLimit = submission.memory_limit;
+      if (submission.language_id === 63 || submission.language_id === 74) {
+        // Node.js (63) and TypeScript (74) reserve virtual address space upfront for V8 CodeRange
+        memoryLimit = Math.max(memoryLimit || 0, 2097152);
+      } else if (submission.language_id === 62) {
+        // Java (62) reserves Metaspace and heap
+        memoryLimit = Math.max(memoryLimit || 0, 4194304);
+      }
+
       const payload = {
         enable_network: false,
+        enable_per_process_and_thread_time_limit: true,
+        enable_per_process_and_thread_memory_limit: true,
+        max_processes_and_or_threads: 64,
         ...submission,
+        memory_limit: memoryLimit,
       };
 
       console.log("[Judge0 Client] Submitting to Judge0:");

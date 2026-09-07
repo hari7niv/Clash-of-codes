@@ -134,6 +134,7 @@ export async function listenToMatchQueue(
             stdout,
             stderr,
             compileOutput,
+            testResults: verdict.testResults || [],
           });
         }
 

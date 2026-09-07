@@ -114,6 +114,7 @@ export const practiceSubmissionRoutes: FastifyPluginAsync = async (app) => {
         totalTests: submission.totalTests,
         runtimeMs: submission.runtimeMs,
         memoryKb: submission.memoryKb,
+        testResults: submission.testResults || [],
         createdAt: submission.createdAt
       };
 

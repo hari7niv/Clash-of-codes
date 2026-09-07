@@ -22,6 +22,7 @@ x-judge0-env: &judge0-env
   # WARNING: This is UNSAFE for production! Use Linux host with proper cgroups for production.
   USE_DOCS_AS_HOMEPAGE: "true"
   ENABLE_COMPILER_OPTIONS: "true"
+  MAX_MEMORY_LIMIT: "4194304"
 
 services:
   server:

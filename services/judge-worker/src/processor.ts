@@ -13,7 +13,12 @@ interface JudgeJobData {
 interface SubmissionTestResult {
   testIndex: number;
   passed: boolean;
+  input: string;
+  expectedOutput: string;
+  actualOutput: string;
   details?: string;
+  stderr?: string;
+  compileOutput?: string;
 }
 
 interface Submission {
@@ -227,10 +232,12 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
         testResults.push({
           testIndex: i,
           passed: testPassed,
+          input: testCase.input,
+          expectedOutput: testCase.expected_output,
+          actualOutput: result.stdout || "",
           details,
-          stdout: result.stdout,
-          stderr: result.stderr,
-          compileOutput: result.compile_output,
+          stderr: result.stderr || undefined,
+          compileOutput: result.compile_output || undefined,
         });
 
         console.log(`Test ${i + 1}: ${testPassed ? "PASS" : "FAIL"} - ${details} (${verdict})`);
@@ -240,6 +247,9 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
         testResults.push({
           testIndex: i,
           passed: false,
+          input: testCase.input,
+          expectedOutput: testCase.expected_output,
+          actualOutput: "",
           details: errorMsg,
         });
       }
@@ -257,6 +267,7 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
       SET verdict = ${finalVerdict},
           passed_tests = ${passedCount},
           total_tests = ${testCases.length},
+          test_results = ${JSON.stringify(testResults)}::jsonb,
           judged_at = ${now}
       WHERE id = ${submission.id}
     `;

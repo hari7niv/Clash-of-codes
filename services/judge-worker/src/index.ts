@@ -1,6 +1,10 @@
 import { Worker } from "bullmq";
 import { judgeProcessor } from "./processor.js";
 import axios from "axios";
+import * as dotenv from "dotenv";
+import * as path from "path";
+
+dotenv.config({ path: path.resolve(process.cwd(), "../../.env") });
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const JUDGE_QUEUE_NAME = process.env.JUDGE_QUEUE_NAME || "judge_submissions";

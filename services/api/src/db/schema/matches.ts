@@ -1,6 +1,17 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, doublePrecision, jsonb } from "drizzle-orm/pg-core";
 import { users } from "./users.js";
 import { problems } from "./problems.js";
+
+export interface TestCaseResult {
+  testIndex: number;
+  passed: boolean;
+  input: string;
+  expectedOutput: string;
+  actualOutput: string;
+  stderr?: string;
+  compileOutput?: string;
+  details?: string;
+}
 
 export const matches = pgTable("matches", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -28,6 +39,7 @@ export const submissions = pgTable("submissions", {
   totalTests: integer("total_tests").default(0).notNull(),
   runtimeMs: integer("runtime_ms"),
   memoryKb: integer("memory_kb"),
+  testResults: jsonb("test_results").$type<TestCaseResult[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   judgedAt: timestamp("judged_at", { withTimezone: true }),
 });
