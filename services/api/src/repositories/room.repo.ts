@@ -48,12 +48,13 @@ export const createRoom = async (data: {
         status: "open",
       }).returning();
 
-      // Host joins the room as a member
+      // FIX P0 BUG: Host joins the room as a member (UPSERT to handle re-creation)
       await tx.insert(roomMembers).values({
         roomId: newRoom.id,
         userId: data.hostUserId,
-        ready: true,
-        joinedAt: new Date(),
+        ready: false,
+      }).onConflictDoNothing({
+        target: [roomMembers.roomId, roomMembers.userId],
       });
 
       return newRoom;
@@ -132,30 +133,36 @@ export const joinRoom = async (code: string, userId: string) => {
       throw new Error("This room is no longer open for joining.");
     }
 
-    // Check if already a member
+    // FIX P0 BUG: Check if already a member (idempotent join)
     const [existing] = await tx
       .select()
       .from(roomMembers)
       .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, userId)));
 
-    if (!existing) {
-      // Get current member count
-      const members = await tx
-        .select()
-        .from(roomMembers)
-        .where(eq(roomMembers.roomId, room.id));
-
-      if (members.length >= room.maxPlayers) {
-        throw new Error("This room has reached its maximum capacity.");
-      }
-
-      await tx.insert(roomMembers).values({
-        roomId: room.id,
-        userId,
-        ready: false,
-        joinedAt: new Date(),
-      });
+    if (existing) {
+      // Already a member, return success (idempotent)
+      console.log(`User ${userId} is already a member of room ${code}`);
+      return room;
     }
+
+    // Get current member count
+    const members = await tx
+      .select()
+      .from(roomMembers)
+      .where(eq(roomMembers.roomId, room.id));
+
+    if (members.length >= room.maxPlayers) {
+      throw new Error("This room has reached its maximum capacity.");
+    }
+
+    // Insert new member using UPSERT to handle race conditions
+    await tx.insert(roomMembers).values({
+      roomId: room.id,
+      userId,
+      ready: false,
+    }).onConflictDoNothing({
+      target: [roomMembers.roomId, roomMembers.userId],
+    });
 
     return room;
   });

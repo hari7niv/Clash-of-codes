@@ -190,36 +190,60 @@ export default function Battle() {
     setCode(starterCodes[language] || starterCodes.python);
   }, [language]);
 
+  // FIX P0 BUG 1: Resolve roomId from matchId via match-server (new flow)
+  // Step 1: When we have matchId but no roomId, emit resolve_match_room
   useEffect(() => {
     if (!socket || !connected || !matchId || roomId) return;
     
-    socket.emit("request_reconnect", { roomId: "", matchId });
+    // Emit new resolve_match_room event with just matchId
+    socket.emit("resolve_match_room", { matchId });
     
+    // Listen for match_room_resolved response
+    const handleMatchRoomResolved = (payload: any) => {
+      console.log(`[Battle] Match room resolved:`, payload);
+      if (payload.matchId === matchId && payload.roomId) {
+        setRoomId(payload.roomId);
+      }
+    };
+    
+    socket.on("match_room_resolved", handleMatchRoomResolved);
+    
+    return () => {
+      socket.off("match_room_resolved", handleMatchRoomResolved);
+    };
+  }, [socket, connected, matchId, roomId]);
+
+  // FIX P0 BUG 3: Implement reconnect flow on socket connect/reconnect
+  // Step 2: After roomId is resolved, emit request_reconnect with actual roomId
+  useEffect(() => {
+    if (!socket || !connected || !matchId || !roomId) return;
+    
+    console.log(`[Battle] Socket connected with roomId=${roomId}, emitting reconnect for match ${matchId}`);
+    
+    // Now we have actual roomId, can properly reconnect
+    socket.emit("request_reconnect", { roomId, matchId });
+    
+    // Listen for room_state response to get full room snapshot
     const handleRoomState = (payload: any) => {
-      if (payload.roomId) setRoomId(payload.roomId);
+      console.log(`[Battle] Received room_state:`, payload);
       if (payload.endsAt) {
         const remaining = payload.endsAt - Date.now();
         setTimeRemainingMs(remaining > 0 ? remaining : 0);
       }
     };
     
-    socket.on("room_state", handleRoomState);
-    return () => { socket.off("room_state", handleRoomState); };
-  }, [socket, connected, matchId, roomId]);
-
-  useEffect(() => {
-    if (!socket || !connected || !matchId) return;
-    
-    if (roomId) {
-      socket.emit("request_reconnect", { roomId, matchId });
-    }
-    
+    // Listen for match result
     const handleMatchResult = (payload: any) => {
       setTimeout(() => setLocation(`/result/${matchId}`), 2000);
     };
     
+    socket.on("room_state", handleRoomState);
     socket.on("match_result", handleMatchResult);
-    return () => { socket.off("match_result", handleMatchResult); };
+    
+    return () => {
+      socket.off("room_state", handleRoomState);
+      socket.off("match_result", handleMatchResult);
+    };
   }, [socket, connected, matchId, roomId, setLocation]);
 
   useEffect(() => {

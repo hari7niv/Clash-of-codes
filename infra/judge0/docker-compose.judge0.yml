@@ -22,7 +22,16 @@ x-judge0-env: &judge0-env
   # WARNING: This is UNSAFE for production! Use Linux host with proper cgroups for production.
   USE_DOCS_AS_HOMEPAGE: "true"
   ENABLE_COMPILER_OPTIONS: "true"
-  MAX_MEMORY_LIMIT: "4194304"
+  # Docker Desktop uses cgroup v2, but Judge0 1.13.1 Isolate requires cgroup v1
+  # Force per-process limits to disable --cg flag in Isolate
+  ENABLE_PER_PROCESS_AND_THREAD_TIME_LIMIT: "true"
+  ENABLE_PER_PROCESS_AND_THREAD_MEMORY_LIMIT: "true"
+  # Increase wall time limit for interpreted languages (Node.js startup overhead)
+  WALL_TIME_LIMIT: "20"
+  MAX_WALL_TIME_LIMIT: "40"
+  # Increase memory limits for Java JVM and Node.js (JVM needs 2GB to initialize)
+  MEMORY_LIMIT: "2048000"
+  MAX_MEMORY_LIMIT: "4096000"
 
 services:
   server:

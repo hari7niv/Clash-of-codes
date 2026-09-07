@@ -17,6 +17,7 @@ interface SubmissionTestResult {
   expectedOutput: string;
   actualOutput: string;
   details?: string;
+  stdout?: string;
   stderr?: string;
   compileOutput?: string;
 }

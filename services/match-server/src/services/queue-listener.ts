@@ -9,6 +9,7 @@ import type { Redis } from "ioredis";
 import { MatchHandler } from "./match-handler.js";
 import type { ClientToServerEvents, ServerToClientEvents, SocketData } from "@clashofcode/shared";
 import { SOCKET_EVENTS } from "@clashofcode/shared";
+import { completeMatch } from "./match-completion.js";
 
 export async function listenToMatchQueue(
   io: Server<ClientToServerEvents, ServerToClientEvents, {}, SocketData>,
@@ -151,6 +152,56 @@ export async function listenToMatchQueue(
         console.log(
           `[Match Server] 📊 Sent verdict to submitter ${submitterId} and progress to opponent in room ${roomId}: ${verdict.verdict} (${verdict.passedTests}/${verdict.totalTests} tests)`
         );
+
+        // FIX P0 BUG 5: Check if submission was accepted AND is a competitive submit (not just "run")
+        // Only complete match on full submissions, not sample runs
+        const isFullSubmission = job.data?.action === "submit" || job.data?.testMode === "full";
+        
+        if (verdict.verdict === "accepted" && isFullSubmission && room.phase === "active") {
+          console.log(
+            `[Match Server] 🏆 Accepted solution from ${submitterId} in match ${room.matchId}, completing match...`
+          );
+          
+          // Complete match with accepted_solution reason
+          const result = await completeMatch({
+            matchId: room.matchId,
+            reason: "accepted_solution",
+          });
+          
+          if (result.success) {
+            await matchHandler.transitionPhase(room.roomId, "completed");
+            
+            // Emit match_result to both players
+            for (const playerId of room.playerIds) {
+              const socketId = matchHandler.getSocketForUser(playerId);
+              if (socketId) {
+                const isPlayerOne = playerId === room.playerIds[0];
+                const ratingChange = isPlayerOne ? result.ratingChanges?.playerOne : result.ratingChanges?.playerTwo;
+                
+                io.to(socketId).emit(SOCKET_EVENTS.MATCH_RESULT, {
+                  roomId: room.roomId,
+                  matchId: room.matchId,
+                  winnerId: result.winnerId || null,
+                  you: ratingChange ? {
+                    ratingBefore: ratingChange.before,
+                    ratingAfter: ratingChange.after,
+                    delta: ratingChange.delta,
+                  } : { ratingBefore: 0, ratingAfter: 0, delta: 0 },
+                  reason: "accepted_solution",
+                });
+              }
+            }
+            
+            console.log(
+              `[Match Server] ✅ Match ${room.matchId} completed. Winner: ${result.winnerId}`
+            );
+          } else {
+            console.error(
+              `[Match Server] Failed to complete match ${room.matchId}:`,
+              result.error
+            );
+          }
+        }
       }
     } catch (error) {
       console.error(
