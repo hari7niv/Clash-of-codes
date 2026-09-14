@@ -15,6 +15,7 @@ export const toPublicUser = (user: typeof users.$inferSelect) => {
     initials: user.username.substring(0, 2).toUpperCase(),
     rating: ratingInt,
     rank: tier.name as any,
+    role: user.role,
   };
 };
 

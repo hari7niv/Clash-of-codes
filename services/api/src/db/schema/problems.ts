@@ -10,6 +10,7 @@ export const problems = pgTable("problems", {
   timeLimitMs: integer("time_limit_ms").default(2000).notNull(),
   memoryLimitKb: integer("memory_limit_kb").default(262144).notNull(),
   tags: text("tags").array().notNull().default([]),
+  isDraft: boolean("is_draft").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

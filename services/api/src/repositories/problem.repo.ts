@@ -13,9 +13,10 @@ export const getProblems = async (options: { topic?: string; difficulty?: string
     conditions.push(eq(problems.difficulty, options.difficulty.toLowerCase()));
   }
   if (options.topic) {
-    // Assuming tags is an array column; use PostgreSQL array contains operator
     conditions.push(sql`${problems.tags} @> ARRAY[${options.topic}]`);
   }
+  // Exclude drafts
+  conditions.push(eq(problems.isDraft, false));
 
   // Base query
   let query = db.select().from(problems);
@@ -83,7 +84,7 @@ export const getProblemById = async (id: string) => {
 };
 
 export const getDailyProblem = async () => {
-  const allProblems = await db.select().from(problems);
+  const allProblems = await db.select().from(problems).where(eq(problems.isDraft, false));
   if (allProblems.length === 0) return null;
   const dayIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
   const problem = allProblems[dayIndex % allProblems.length];

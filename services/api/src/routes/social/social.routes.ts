@@ -285,7 +285,7 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
       timeControl: "blitz",
     });
     
-    // TODO: Send a notification/invite to the target user via socket or notification system
+    // We are currently just returning the room code which can be shared externally.
     // For now, we return the room code which can be shared
     
     return { 
@@ -350,10 +350,7 @@ export const socialRoutes: FastifyPluginAsync = async (app) => {
       timeControl: "blitz",
     });
     
-    // TODO: Send a notification/invite to the target user
-    // This would typically involve:
-    // 1. Creating a notification record in the database
-    // 2. Emitting a socket event to the target user if they're online
+    // Notifications for invites are currently not implemented (requires a notifications table or live socket event routing).
     
     return { 
       success: true, 

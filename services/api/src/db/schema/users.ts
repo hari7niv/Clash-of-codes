@@ -5,6 +5,7 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  role: text("role").default("user").notNull(),
   rating: doublePrecision("rating").default(1500).notNull(),
   ratingDeviation: doublePrecision("rating_deviation").default(350).notNull(),
   ratingVolatility: doublePrecision("rating_volatility").default(0.06).notNull(),

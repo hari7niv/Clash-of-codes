@@ -1,4 +1,20 @@
-# ClashOfCode — Backend
+<div align="center">
+  <h1>⚔️ ClashOfCode</h1>
+  <p><strong>A competitive 1v1 Data Structures & Algorithms battle platform.</strong></p>
+  
+  <p>
+    <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+    <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
+    <img src="https://img.shields.io/badge/Fastify-000000?style=for-the-badge&logo=fastify&logoColor=white" alt="Fastify" />
+    <img src="https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+    <img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis" />
+    <img src="https://img.shields.io/badge/Docker-2CA5E0?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
+  </p>
+</div>
+
+<br/>
+
+## 🏗️ Backend Architecture
 
 Three independently deployable services sharing one types/schema package, because
 they scale, fail, and deploy differently (Architecture §3.4 and §8):
@@ -33,12 +49,16 @@ pnpm judge0:up                  # start the isolated Judge0 stack
 pnpm dev:judge0-mock            # mock Judge0 on port 2359
 
 # each service in its own terminal
-pnpm dev:api                    # http://localhost:3001
-pnpm dev:judge                  # connects to Judge0/mock on port 2359
-pnpm dev:match                  # ws://localhost:4100
+pnpm dev:api                    # API Server on port 4000
+pnpm dev:judge                  # connects to Judge0/mock (port 2358/2359)
+pnpm dev:match                  # Match Server on port 4100
 ```
 
-**Windows Development Note**: Real Judge0 requires Linux cgroups and cannot run natively on Windows. The project includes a mock Judge0 server (`infra/judge0/mock-judge0-server.js`) that runs on port 2359. The judge-worker's `.env` file should point to `JUDGE0_URL=http://localhost:2359` for local Windows development.
+> [!WARNING]
+> **Windows Development Note**: Real Judge0 requires Linux cgroups and cannot run natively on Docker Desktop for Windows. 
+> The project includes a mock Judge0 server (`infra/judge0/mock-judge0-server.js`) that runs on port 2359. 
+> Ensure your `.env` file points to `JUDGE0_URL=http://localhost:2359` for local Windows development.
+> Also ensure your frontend runs on port `3000` (e.g. `CORS_ORIGIN=http://localhost:3000`).
 
 **WSL2/Linux Judge0 Note**: If using real Judge0 on WSL2 or Linux and getting "Internal Error" (status 13), this is usually a cgroup v1 vs v2 compatibility issue. See [JUDGE0_TROUBLESHOOTING.md](./JUDGE0_TROUBLESHOOTING.md) for detailed diagnosis and fixes. TL;DR: Use mock Judge0 for local dev, real Judge0 for production Linux deployment.
 

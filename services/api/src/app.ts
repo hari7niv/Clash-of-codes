@@ -13,6 +13,7 @@ import { roomRoutes } from "./routes/rooms/rooms.routes.js";
 import { matchRoutes } from "./routes/matches/matches.routes.js";
 import { leaderboardRoutes } from "./routes/leaderboard/leaderboard.routes.js";
 import { socialRoutes } from "./routes/social/social.routes.js";
+import { adminRoutes } from "./routes/admin/admin.routes.js";
 
 export const buildApp = async () => {
   const app = fastify({
@@ -52,6 +53,7 @@ export const buildApp = async () => {
   app.register(matchRoutes, { prefix: "/api/matches" });
   app.register(leaderboardRoutes, { prefix: "/api/leaderboard" });
   app.register(socialRoutes, { prefix: "/api/friends" });
+  app.register(adminRoutes, { prefix: "/api/admin" });
 
   return app;
 };
