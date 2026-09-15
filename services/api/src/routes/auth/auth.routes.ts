@@ -7,6 +7,7 @@ import { db } from "../../db/client.js";
 import { users, refreshTokens, passwordResetTokens, userProgress } from "../../db/schema/users.js";
 import { createUser, getUserByEmail, toPublicUser } from "../../repositories/user.repo.js";
 import { registerSchema, loginSchema } from "@clashofcode/shared";
+import { emailWelcome, emailPasswordReset } from "../../services/email.service.js";
 
 // Helper function to generate a secure random hex token
 const generateSecureToken = () => crypto.randomBytes(32).toString("hex");
@@ -68,6 +69,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         tokenHash: hashedRefreshToken,
         expiresAt,
       });
+
+      // Send welcome email (non-blocking)
+      emailWelcome(normalizedEmail, rawUser.username).catch(() => {});
 
       return reply.code(201).send({ user, accessToken, refreshToken: rawRefreshToken });
     } catch (err: any) {
@@ -184,8 +188,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
           expiresAt,
         });
 
-        // Development logging guard
-        console.log(`[DEVELOPMENT ONLY] Password Reset URL: http://localhost:3000/reset-password?token=${rawResetToken}`);
+        // Development logging guard — also send real email in prod
+        const resetUrl = `${process.env.CORS_ORIGIN || "http://localhost:3000"}/reset-password?token=${rawResetToken}`;
+        console.log(`[DEVELOPMENT ONLY] Password Reset URL: ${resetUrl}`);
+        emailPasswordReset(normalizedEmail, resetUrl).catch(() => {});
       }
 
       // ALWAYS return 202 Accepted

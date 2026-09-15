@@ -21,17 +21,24 @@ export const matchmakingRoutes: FastifyPluginAsync = async (app) => {
   app.get("/status", async (request, reply) => {
     try {
       const { id: userId } = request.user as { id: string };
+      const query = request.query as { topic?: string };
 
       const [user] = await db.select().from(users).where(eq(users.id, userId));
       const userRating = user ? Math.round(user.rating) : 1500;
 
-      // Read real Redis queue sizes
+      // Read real Redis queue sizes — also check topic-filtered queues
       const [rankedCount, casualCount] = await Promise.all([
         redis.zcard("queue:ranked"),
         redis.zcard("queue:casual"),
       ]);
 
-      const totalQueued = rankedCount + casualCount;
+      // FR-2.1: Topic queue if specified
+      let topicQueueCount = 0;
+      if (query.topic) {
+        topicQueueCount = await redis.zcard(`queue:topic:${query.topic}`);
+      }
+
+      const totalQueued = rankedCount + casualCount + topicQueueCount;
       const estWaitSeconds = totalQueued > 0 ? Math.max(3, Math.round(10 / totalQueued)) : 10;
 
       return {
@@ -41,8 +48,10 @@ export const matchmakingRoutes: FastifyPluginAsync = async (app) => {
         queueDepth: {
           ranked: rankedCount,
           casual: casualCount,
+          topic: topicQueueCount,
           total: totalQueued,
         },
+        topicFilter: query.topic || null,
       };
     } catch (err: any) {
       return reply.code(500).send({ error: { code: "INTERNAL_ERROR", message: err.message } });

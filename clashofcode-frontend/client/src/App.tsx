@@ -27,6 +27,8 @@ import RoomLobby from "@/pages/RoomLobby";
 import RoomWaiting from "@/pages/RoomWaiting";
 import Signup from "@/pages/Signup";
 import Settings from "@/pages/Settings";
+import OAuthCallback from "@/pages/OAuthCallback";
+import AdminDashboard from "@/pages/AdminDashboard";
 import { Route, Switch, Redirect, useLocation } from "wouter";
 
 function PrivateRoute({ component: Component, ...rest }: { component: any; path?: string }) {
@@ -68,6 +70,7 @@ function PrivateRouter() {
         <Route path="/settings"><PrivateRoute component={Settings} /></Route>
         <Route path="/profile/edit"><PrivateRoute component={EditProfile} /></Route>
         <Route path="/profile"><PrivateRoute component={Profile} /></Route>
+        <Route path="/admin"><PrivateRoute component={AdminDashboard} /></Route>
         <Route component={NotFound} />
       </Switch>
     </AppShell>
@@ -80,6 +83,7 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
+      <Route path="/oauth/callback" component={OAuthCallback} />
       <Route component={PrivateRouter} />
     </Switch>
   ); 
