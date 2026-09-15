@@ -30,6 +30,7 @@ import Settings from "@/pages/Settings";
 import OAuthCallback from "@/pages/OAuthCallback";
 import AdminDashboard from "@/pages/AdminDashboard";
 import Tournaments from "@/pages/Tournaments";
+import TournamentDetails from "@/pages/TournamentDetails";
 import Notifications from "@/pages/Notifications";
 import { Route, Switch, Redirect, useLocation } from "wouter";
 
@@ -73,6 +74,7 @@ function PrivateRouter() {
         <Route path="/profile/edit"><PrivateRoute component={EditProfile} /></Route>
         <Route path="/profile"><PrivateRoute component={Profile} /></Route>
         <Route path="/admin"><PrivateRoute component={AdminDashboard} /></Route>
+        <Route path="/tournaments/:id"><PrivateRoute component={TournamentDetails} /></Route>
         <Route path="/tournaments"><PrivateRoute component={Tournaments} /></Route>
         <Route path="/notifications"><PrivateRoute component={Notifications} /></Route>
         <Route component={NotFound} />

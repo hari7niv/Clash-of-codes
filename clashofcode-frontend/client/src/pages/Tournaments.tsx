@@ -48,10 +48,10 @@ export default function Tournaments() {
     setRegistering(id);
     try {
       await api.post(`/tournaments/${id}/register`);
-      setRegistered(prev => new Set([...prev, id]));
+      setRegistered(prev => { const n = new Set(prev); n.add(id); return n; });
     } catch (e: any) {
       const msg = e?.response?.data?.error?.message;
-      if (msg === "Already registered") setRegistered(prev => new Set([...prev, id]));
+      if (msg === "Already registered") setRegistered(prev => { const n = new Set(prev); n.add(id); return n; });
     } finally {
       setRegistering(null);
     }

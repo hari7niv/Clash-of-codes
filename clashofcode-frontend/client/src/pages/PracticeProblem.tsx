@@ -502,9 +502,9 @@ export default function PracticeProblem() {
                       <p className="text-xs font-mono">Executing test cases...</p>
                     </div>
                   )}
-                  {runState === "done" && result?.testResults.length > 0 && (
+                  {runState === "done" && (result?.testResults?.length ?? 0) > 0 && (
                     <TestCasePanel
-                      results={result.testResults}
+                      results={result!.testResults!}
                       activeIndex={activeTestIdx}
                       onSelect={setActiveTestIdx}
                     />

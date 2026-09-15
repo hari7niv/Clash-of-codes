@@ -40,7 +40,44 @@ export default function Dashboard() {
         <section className="panel p-5 sm:p-6">
           <div className="flex items-end justify-between gap-4"><div><p className="section-kicker">Daily objective board</p><h2 className="mt-1 font-display text-2xl font-bold tracking-[-.055em]">Today’s quests</h2></div><Link href="/practice" className="inline-flex items-center gap-1 text-xs font-medium text-[#aeb1ba] hover:text-white">View all <ChevronRight className="h-3.5 w-3.5" /></Link></div>
           <div className="mt-5 divide-y divide-white/[.08]">
-            {quests.map((quest) => <div key={quest.title} className="flex gap-3 py-4 first:pt-0 last:pb-0"><div className={`flex h-9 w-9 flex-none items-center justify-center border font-mono text-[10px] ${quest.complete ? "border-[#b5df73]/40 bg-[#b5df73]/10 text-[#cde7a5]" : "border-white/10 bg-white/[.035] text-[#8d909b]"}`}>{quest.complete ? <Check className="h-4 w-4" /> : quest.icon}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold text-[#e8e8ea]">{quest.title}</p><Pill tone={quest.complete ? "lime" : "neutral"}>{quest.reward}</Pill></div><p className="mt-1 text-xs text-[#898c97]">{quest.detail}</p><div className="mt-3"><Meter value={(quest.progress / quest.total) * 100} tone="lime" /></div><p className="mt-1.5 font-mono text-[10px] text-[#70737e]">{quest.progress} / {quest.total} {quest.complete ? "COMPLETE" : "PROGRESS"}</p></div></div>)}
+            {quests.map((quest) => (
+              <div key={quest.title} className="flex gap-3 py-4 first:pt-0 last:pb-0">
+                <div className={`flex h-9 w-9 flex-none items-center justify-center border font-mono text-[10px] ${quest.complete ? "border-[#b5df73]/40 bg-[#b5df73]/10 text-[#cde7a5]" : "border-white/10 bg-white/[.035] text-[#8d909b]"}`}>
+                  {quest.complete ? <Check className="h-4 w-4" /> : quest.icon}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[#e8e8ea]">{quest.title}</p>
+                    <Pill tone={quest.complete ? "lime" : "neutral"}>{quest.reward}</Pill>
+                  </div>
+                  <p className="mt-1 text-xs text-[#898c97]">{quest.detail}</p>
+                  <div className="mt-3">
+                    <Meter value={(quest.progress / quest.total) * 100} tone="lime" />
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between">
+                    <p className="font-mono text-[10px] text-[#70737e]">{quest.progress} / {quest.total} {quest.complete ? "COMPLETE" : "PROGRESS"}</p>
+                    {quest.complete && !quest.rewardClaimed && (
+                      <button 
+                        onClick={async () => {
+                          try {
+                            await import("@/lib/api").then(m => m.api.post(`/quests/${quest.id}/claim`));
+                            window.location.reload(); // Simple refresh to show updated XP/level
+                          } catch (e) {
+                            console.error(e);
+                          }
+                        }}
+                        className="rounded border border-[#b5df73]/30 bg-[#b5df73]/10 px-2 py-1 text-[10px] font-bold tracking-wider text-[#cde7a5] hover:bg-[#b5df73]/20 transition-colors uppercase"
+                      >
+                        Claim XP
+                      </button>
+                    )}
+                    {quest.complete && quest.rewardClaimed && (
+                      <span className="font-mono text-[10px] text-[#70737e]">CLAIMED</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 
