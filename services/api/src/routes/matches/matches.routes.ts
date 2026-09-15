@@ -4,6 +4,7 @@ import { getJudgeQueue } from "../../services/judge-queue.js";
 import { completeMatch } from "../../services/rating-calculator.js";
 import { db } from "../../db/client.js";
 import { submissions } from "../../db/schema/matches.js";
+import { pasteEvents } from "../../db/schema/events.js";
 import { eq } from "drizzle-orm";
 
 export const matchRoutes: FastifyPluginAsync = async (app) => {
@@ -196,6 +197,32 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
         match: completedMatch,
         result
       };
+    } catch (err: any) {
+      return reply.code(400).send({ error: { code: "BAD_REQUEST", message: err.message } });
+    }
+  });
+  // FR-15.2: Log a paste event for anti-cheat post-hoc review
+  app.post("/:matchId/paste-events", async (request, reply) => {
+    try {
+      const { id: userId } = request.user as { id: string };
+      const { matchId } = request.params as { matchId: string };
+      const body = request.body as { pastedText: string; language: string };
+
+      if (!body.pastedText || !body.language) {
+        return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "pastedText and language are required" } });
+      }
+
+      // Truncate pasted text to prevent abuse (max 10KB)
+      const truncated = body.pastedText.substring(0, 10240);
+
+      await db.insert(pasteEvents).values({
+        matchId,
+        userId,
+        pastedText: truncated,
+        language: body.language,
+      });
+
+      return { success: true };
     } catch (err: any) {
       return reply.code(400).send({ error: { code: "BAD_REQUEST", message: err.message } });
     }

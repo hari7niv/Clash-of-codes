@@ -2,7 +2,7 @@ import { FastifyPluginAsync } from "fastify";
 import { getUserById, getUserByUsername, updateUser, toPlayerProfile, toPublicUser, getFriends } from "../../repositories/user.repo.js";
 import { db } from "../../db/client.js";
 import { users, userProgress } from "../../db/schema/users.js";
-import { matches, submissions } from "../../db/schema/matches.js";
+import { matches, submissions, ratingsHistory } from "../../db/schema/matches.js";
 import { problems } from "../../db/schema/problems.js";
 import { eq, and, or, desc, sql } from "drizzle-orm";
 import { tierForRating } from "@clashofcode/shared";
@@ -246,6 +246,31 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return matchHistory;
+  });
+
+  // FR-6.6: Rating history for graph display
+  app.get("/me/rating-history", async (request, reply) => {
+    const { id } = request.user as { id: string };
+
+    const history = await db
+      .select({
+        ratingAfter: ratingsHistory.ratingAfter,
+        delta: ratingsHistory.delta,
+        createdAt: ratingsHistory.createdAt,
+        matchId: ratingsHistory.matchId,
+      })
+      .from(ratingsHistory)
+      .where(eq(ratingsHistory.userId, id))
+      .orderBy(ratingsHistory.createdAt)
+      .limit(50);
+
+    return history.map((h, i) => ({
+      index: i + 1,
+      rating: Math.round(h.ratingAfter),
+      delta: Math.round(h.delta),
+      date: h.createdAt,
+      matchId: h.matchId,
+    }));
   });
 
   app.delete("/me", async (request, reply) => {
