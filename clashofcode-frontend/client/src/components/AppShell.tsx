@@ -3,16 +3,18 @@
  * workspace header create a single continuous competition desk rather than separate chrome pieces.
  */
 import { Link, useLocation } from "wouter";
-import { Bell, BookOpen, ChevronRight, Crosshair, Flame, Home, LogOut, Menu, Plus, Settings, Swords, Trophy, Users, X } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { Bell, BookOpen, ChevronRight, Crosshair, Flame, Home, LogOut, Menu, Plus, Settings, Shield, Swords, Trophy, Users, X } from "lucide-react";
+import { useState, useEffect, type ReactNode } from "react";
 import { Avatar, RankBadge } from "./ArenaPrimitives";
 import { usePlayerData } from "@/hooks/usePlayerData";
 import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api";
 
 const navItems = [
   { href: "/app", label: "Home", icon: Home },
   { href: "/battle", label: "Battle", icon: Swords },
   { href: "/practice", label: "Practice", icon: BookOpen },
+  { href: "/tournaments", label: "Tournaments", icon: Trophy },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { href: "/friends", label: "Friends", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -22,9 +24,21 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { player } = usePlayerData();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
   const closeMobile = () => setMobileOpen(false);
   const isActive = (href: string) => href === "/app" ? location === "/app" : location.startsWith(href);
+  const isAdmin = (user as any)?.role === "admin";
+
+  // Poll notification count every 60 seconds
+  useEffect(() => {
+    const fetch = () => api.get("/notifications?unreadOnly=true&limit=1")
+      .then(r => setUnreadCount(r.data?.unreadCount || 0))
+      .catch(() => {});
+    fetch();
+    const interval = setInterval(fetch, 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -39,6 +53,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="rail-brand"><Link href="/app" className="flex items-center gap-3" onClick={closeMobile}><img src="/manus-storage/codeclash-mark_03d4d311.png" alt="ClashOfCode" className="h-11 w-11 object-contain" /><span><span className="block font-display text-[1.35rem] font-bold leading-none tracking-[-.085em]">CLASHOFCODE</span><span className="mt-1.5 block font-mono text-[8px] tracking-[.17em] text-[#747783]">COMPETITIVE CODING ARENA</span></span></Link></div>
       <div className="rail-section-label">Navigate</div>
       <nav className="mt-3 flex flex-col gap-1" aria-label="Main navigation">{navItems.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={closeMobile} className={`rail-link ${isActive(href) ? "is-active" : ""}`}><Icon className="h-[17px] w-[17px]" /><span>{label}</span>{isActive(href) && <ChevronRight className="ml-auto h-4 w-4" />}</Link>)}</nav>
+      {isAdmin && (
+        <div className="mt-2 px-3">
+          <Link href="/admin" onClick={closeMobile} className={`rail-link border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 ${isActive("/admin") ? "is-active" : ""}`}>
+            <Shield className="h-[17px] w-[17px]" /><span>Admin</span>{isActive("/admin") && <ChevronRight className="ml-auto h-4 w-4" />}
+          </Link>
+        </div>
+      )}
       <div className="rail-match-action"><span className="rail-section-label">Matchmaking</span><Link href="/matchmaking" onClick={closeMobile} className="battle-rail-cta"><Crosshair className="h-4 w-4" /><span>Find opponent</span></Link></div>
       <div className="mt-auto px-4 pb-5 space-y-2">
         {player ? (
@@ -52,6 +73,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </div>
     </aside>
     {mobileOpen && <button aria-label="Close navigation" className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={closeMobile} />}
-    <main className="app-canvas"><div className="desktop-topline"><div className="flex min-w-0 items-center gap-3"><span className="section-kicker">Competitive desk</span><span className="topline-divider" /><span className="topline-live"><span className="live-dot" /> Arena live</span><span className="font-mono text-[9px] tracking-[.13em] text-[#747783]">SEASON 03 / WEEK 07</span></div><div className="ml-auto flex items-center gap-2"><Link href="/rooms/create" className="topline-action"><Plus className="h-3.5 w-3.5" />Create room</Link><button className="icon-button h-8 w-8" aria-label="Notifications"><Bell className="h-4 w-4" /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#f04432]" /></button><span className="topline-run"><Flame className="h-3 w-3 text-[#e1a759]" />{player?.streak || 0} day run</span></div></div><div className="app-workspace">{children}</div></main>
+    <main className="app-canvas"><div className="desktop-topline"><div className="flex min-w-0 items-center gap-3"><span className="section-kicker">Competitive desk</span><span className="topline-divider" /><span className="topline-live"><span className="live-dot" /> Arena live</span><span className="font-mono text-[9px] tracking-[.13em] text-[#747783]">SEASON 03 / WEEK 07</span></div><div className="ml-auto flex items-center gap-2"><Link href="/rooms/create" className="topline-action"><Plus className="h-3.5 w-3.5" />Create room</Link>
+      <Link href="/notifications" className="icon-button relative h-8 w-8" aria-label="Notifications">
+        <Bell className="h-4 w-4" />
+        {unreadCount > 0 && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#f04432] font-mono text-[9px] font-bold text-white">{unreadCount > 9 ? "9+" : unreadCount}</span>}
+      </Link>
+      <span className="topline-run"><Flame className="h-3 w-3 text-[#e1a759]" />{player?.streak || 0} day run</span></div></div><div className="app-workspace">{children}</div></main>
   </div>;
 }

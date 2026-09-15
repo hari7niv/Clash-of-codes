@@ -3,10 +3,13 @@
  * panel with direct validation and familiar competition signals, never a detached generic form.
  */
 import PublicShell from "@/components/PublicShell";
-import { ArrowRight, KeyRound, Mail, ShieldCheck } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { ArrowRight, Github, KeyRound, Mail, ShieldCheck } from "lucide-react";
+import { FormEvent, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api";
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
 
 type Errors = { email?: string; password?: string; general?: string };
 const validEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -18,6 +21,11 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Errors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [oauthProviders, setOauthProviders] = useState<{ github: boolean; google: boolean }>({ github: false, google: false });
+  
+  useEffect(() => {
+    api.get("/auth/oauth/providers").then(r => setOauthProviders(r.data)).catch(() => {});
+  }, []);
   
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -79,6 +87,21 @@ export default function Login() {
           </div>
         </form>
         <p className="auth-switch">New to ClashOfCode? <Link href="/signup">Create an account</Link></p>
+        {(oauthProviders.github || oauthProviders.google) && (
+          <div className="mt-5 border-t border-white/10 pt-5 space-y-2">
+            <p className="text-center font-mono text-[10px] text-[#747783] tracking-[.12em] mb-3">OR CONTINUE WITH</p>
+            {oauthProviders.github && (
+              <a href={`${API_BASE}/auth/oauth/github`} className="flex w-full items-center justify-center gap-2 rounded border border-white/15 bg-white/[.04] py-2.5 text-sm font-medium text-white hover:bg-white/10 transition-colors">
+                <Github className="h-4 w-4" /> GitHub
+              </a>
+            )}
+            {oauthProviders.google && (
+              <a href={`${API_BASE}/auth/oauth/google`} className="flex w-full items-center justify-center gap-2 rounded border border-white/15 bg-white/[.04] py-2.5 text-sm font-medium text-white hover:bg-white/10 transition-colors">
+                <Mail className="h-4 w-4" /> Google
+              </a>
+            )}
+          </div>
+        )}
       </section>
     </main>
   </PublicShell>;
