@@ -116,7 +116,7 @@ export async function completeMatch(
 
     // Check if already completed (idempotency)
     const matchCheck = await client.query(
-      "SELECT id, status, winner_id, player_one_id, player_two_id FROM matches WHERE id = $1 FOR UPDATE",
+      "SELECT id, status, winner_id, player_one_id, player_two_id, room_code, mode FROM matches WHERE id = $1 FOR UPDATE",
       [matchId]
     );
 
@@ -207,6 +207,14 @@ export async function completeMatch(
        WHERE id = $2`,
       [winnerId, matchId]
     );
+
+    // If this was a room match, reset room status back to open
+    if (match.room_code) {
+      await client.query(
+        `UPDATE rooms SET status = 'open' WHERE code = $1`,
+        [match.room_code]
+      );
+    }
 
     // Only calculate ratings for ranked matches with two players
     if (!playerTwoId || match.mode !== "ranked") {

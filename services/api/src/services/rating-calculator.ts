@@ -1,7 +1,7 @@
 import { computeMatchRatings } from "@clashofcode/shared";
 import { db, pool } from "../db/client.js";
 import { users, users as usersTable } from "../db/schema/users.js";
-import { matches, submissions, ratingsHistory } from "../db/schema/matches.js";
+import { matches, submissions, ratingsHistory, rooms } from "../db/schema/matches.js";
 import { eq, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as usersSchema from "../db/schema/users.js";
@@ -201,5 +201,11 @@ const completMatchInternal = async (matchId: string, tx: any) => {
 
   // Return updated match
   const [updatedMatch] = await db.select().from(matches).where(eq(matches.id, matchId));
+
+  // If this was a room match, reset room status back to open
+  if (updatedMatch.roomCode) {
+    await tx.update(rooms).set({ status: "open" }).where(eq(rooms.code, updatedMatch.roomCode));
+  }
+
   return updatedMatch;
 };

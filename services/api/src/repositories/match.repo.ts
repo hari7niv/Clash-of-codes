@@ -21,7 +21,16 @@ export const getMatchById = async (matchId: string, currentUserId?: string) => {
           WHERE rm.room_id = (SELECT id FROM rooms WHERE code = ${match.roomCode})
           AND rm.user_id != ${currentUserId || ''}`
     );
-    opponents = members.rows;
+    opponents = members.rows.map((m: any) => ({
+      id: m.id,
+      handle: m.username,
+      initials: m.username.substring(0, 2).toUpperCase(),
+      rating: Math.round(m.rating),
+      gamesPlayed: m.games_played ?? 0,
+      wins: m.wins ?? 0,
+      losses: m.losses ?? 0,
+      draws: m.draws ?? 0,
+    }));
   } else {
     // Dynamically select the opponent depending on who is requesting the data
     let opponentId = match.playerTwoId;
@@ -30,7 +39,16 @@ export const getMatchById = async (matchId: string, currentUserId?: string) => {
     }
     if (opponentId) {
       const [opp] = await db.select().from(users).where(eq(users.id, opponentId));
-      if (opp) opponents.push(opp);
+      if (opp) opponents.push({
+        id: opp.id,
+        handle: opp.username,
+        initials: opp.username.substring(0, 2).toUpperCase(),
+        rating: Math.round(opp.rating),
+        gamesPlayed: opp.gamesPlayed ?? 0,
+        wins: opp.wins ?? 0,
+        losses: opp.losses ?? 0,
+        draws: opp.draws ?? 0,
+      });
     }
   }
 

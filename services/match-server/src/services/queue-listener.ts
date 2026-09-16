@@ -16,7 +16,7 @@ export async function listenToMatchQueue(
   redisConnection: Redis,
   matchHandler?: MatchHandler
 ): Promise<void> {
-  const JUDGE_QUEUE_NAME = process.env.JUDGE_QUEUE_NAME || "judge_submissions";
+  const JUDGE_QUEUE_NAME = process.env.JUDGE_QUEUE_NAME || "judge";
 
   const queueEvents = new QueueEvents(JUDGE_QUEUE_NAME, {
     connection: redisConnection,
