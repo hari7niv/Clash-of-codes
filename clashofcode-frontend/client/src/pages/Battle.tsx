@@ -14,6 +14,7 @@ import {
   X,
   Loader2,
   Clock,
+  Flag,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { useEffect, useState } from "react";
@@ -91,10 +92,10 @@ const VERDICT_META: Record<string, { label: string; color: string; bg: string }>
 
 interface TestResult {
   testIndex: number;
-  passed: boolean;
+  passed?: boolean;
   input: string;
   expectedOutput: string;
-  actualOutput: string;
+  actualOutput?: string;
   stderr?: string;
   compileOutput?: string;
   details?: string;
@@ -117,13 +118,15 @@ function TestCasePanel({ results, activeIndex, onSelect }: {
             onClick={() => onSelect(i)}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-mono rounded-t border-b-2 transition-colors ${
               activeIndex === i
-                ? r.passed
-                  ? "border-[#6cb369] text-[#6cb369] bg-[#6cb36910]"
-                  : "border-[#e48b87] text-[#e48b87] bg-[#e48b8710]"
+                ? r.actualOutput !== undefined
+                  ? r.passed
+                    ? "border-[#6cb369] text-[#6cb369] bg-[#6cb36910]"
+                    : "border-[#e48b87] text-[#e48b87] bg-[#e48b8710]"
+                  : "border-[#666973] text-[#e9e9eb] bg-white/[.04]"
                 : "border-transparent text-[#858893] hover:text-[#c9cbd1]"
             }`}
           >
-            {r.passed ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+            {r.actualOutput !== undefined ? (r.passed ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />) : <TerminalSquare className="h-3 w-3" />}
             Case {i + 1}
           </button>
         ))}
@@ -131,12 +134,14 @@ function TestCasePanel({ results, activeIndex, onSelect }: {
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         <IOBlock label="Input" value={active.input} />
         <IOBlock label="Expected Output" value={active.expectedOutput} />
-        <IOBlock
-          label="Your Output"
-          value={active.actualOutput}
-          highlight={active.passed ? "green" : "red"}
-          empty={!active.actualOutput}
-        />
+        {active.actualOutput !== undefined && (
+          <IOBlock
+            label="Your Output"
+            value={active.actualOutput}
+            highlight={active.passed ? "green" : "red"}
+            empty={!active.actualOutput}
+          />
+        )}
         {active.stderr && <IOBlock label="Stderr" value={active.stderr} highlight="amber" />}
         {active.compileOutput && <IOBlock label="Compilation Output" value={active.compileOutput} highlight="amber" />}
       </div>
@@ -174,6 +179,7 @@ export default function Battle() {
   const [language, setLanguage] = useState("python");
   const [code, setCode] = useState(starterCodes.python);
   const [timeRemainingMs, setTimeRemainingMs] = useState<number | null>(null);
+  const [forfeitLoading, setForfeitLoading] = useState(false);
   
   const [activeTab, setActiveTab] = useState<"testcase" | "result">("testcase");
   const [activeTestIdx, setActiveTestIdx] = useState(0);
@@ -182,6 +188,7 @@ export default function Battle() {
   const [passedTests, setPassedTests] = useState(0);
   const [totalTests, setTotalTests] = useState(0);
   const [runtimeMs, setRuntimeMs] = useState<number | null>(null);
+  const [opponentConnected, setOpponentConnected] = useState(true);
   
   const { socket, connected } = useMatchSocket();
   const { player, matchData, loading, error } = useBattleData(matchId || "no-match");
@@ -272,11 +279,18 @@ export default function Battle() {
       setActiveTestIdx(0);
     };
     
+    const handleDisconnect = () => setOpponentConnected(false);
+    const handleReconnect = () => setOpponentConnected(true);
+    
     socket.on("timer_sync", handleTimer as any);
     socket.on("submission_result", handleResult as any);
+    socket.on("opponent_disconnected", handleDisconnect);
+    socket.on("opponent_reconnected", handleReconnect);
     return () => {
       socket.off("timer_sync", handleTimer as any);
       socket.off("submission_result", handleResult as any);
+      socket.off("opponent_disconnected", handleDisconnect);
+      socket.off("opponent_reconnected", handleReconnect);
     };
   }, [socket, matchId, roomId]);
 
@@ -295,7 +309,7 @@ export default function Battle() {
   if (loading) return <div className="page-wrap enter-up p-8 flex justify-center text-[#848792]">Loading match...</div>;
   if (error || !player) return <div className="page-wrap enter-up p-8 flex justify-center text-[#e48b87]">Error loading match.</div>;
 
-  const opponent = matchData?.opponent || { handle: "rohanbits", initials: "RM", rating: 1856 };
+  const opponents = matchData?.opponents || [{ handle: "rohanbits", initials: "RM", rating: 1856 }];
   
   const formatTime = (milliseconds: number | null) => {
     if (milliseconds === null) return "--:--";
@@ -319,6 +333,20 @@ export default function Battle() {
       sourceCode: code,
       action,
     });
+  };
+
+  const handleForfeit = () => {
+    if (!socket || !connected || !roomId || !matchId) return;
+    
+    if (confirm("Are you sure you want to forfeit this match? This will count as a loss.")) {
+      setForfeitLoading(true);
+      socket.emit("forfeit_match", {
+        roomId,
+        matchId,
+      });
+      // Fallback in case match_result event takes too long
+      setTimeout(() => setLocation(`/result/${matchId}`), 3000);
+    }
   };
 
   const problem = matchData?.problem || {
@@ -347,11 +375,15 @@ export default function Battle() {
             <span className="font-mono text-[11px] text-[#d5d6da]">{player.handle}</span>
             <span className="font-mono text-[10px] text-[#8f929c]">{player.rating}</span>
           </div>
-          <div className="battle-player">
-            <Avatar initials={opponent.initials} tone="blue" size="sm" />
-            <span className="font-mono text-[11px] text-[#d5d6da]">{opponent.handle}</span>
-            <span className="font-mono text-[10px] text-[#8f929c]">{opponent.rating}</span>
-          </div>
+          {opponents.map((opp: any) => (
+            <div key={opp.handle} className="battle-player">
+              <Avatar initials={opp.initials} tone="blue" size="sm" />
+              <div className="flex flex-col ml-2">
+                <span className="font-mono text-[11px] text-[#d5d6da] leading-none mb-0.5">{opp.handle}</span>
+                <span className="font-mono text-[10px] text-[#8f929c] leading-none">{opp.rating}</span>
+              </div>
+            </div>
+          ))}
           <div className="ml-auto flex items-center gap-3">
             <div className="battle-timer">
               <span className="section-kicker block">Time remaining</span>
@@ -364,6 +396,15 @@ export default function Battle() {
               <span className="section-kicker block">Match</span>
               <span className="font-mono text-xs text-[#d1d2d7]">{matchData?.matchCode || `#${matchId.substring(0, 4).toUpperCase()}`}</span>
             </div>
+            <div className="hidden h-10 w-px bg-white/10 sm:block" />
+            <button 
+              onClick={handleForfeit} 
+              disabled={runState === "running" || forfeitLoading} 
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors border border-red-500/20 text-xs font-medium disabled:opacity-50"
+            >
+              {forfeitLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Flag className="h-3.5 w-3.5" />} 
+              Forfeit
+            </button>
           </div>
         </div>
       </header>
@@ -403,8 +444,8 @@ export default function Battle() {
               </div>
             )}
             <div className="border-t border-white/[.08] pt-5">
-              <div className="flex items-center justify-between"><p className="section-kicker">Opponent signal</p><Pill tone="blue"><Wifi className="h-3 w-3" /> Connected</Pill></div>
-              <p className="mt-3 text-xs leading-5 text-[#979aa4]">Your opponent is working. No solution progress has been revealed.</p>
+              <div className="flex items-center justify-between"><p className="section-kicker">Opponent signal</p><Pill tone={opponentConnected ? "blue" : "red"}><Wifi className="h-3 w-3" /> {opponentConnected ? "Connected" : "Disconnected"}</Pill></div>
+              <p className="mt-3 text-xs leading-5 text-[#979aa4]">{opponentConnected ? "Your opponent is working. No solution progress has been revealed." : "Your opponent has disconnected. Waiting for them to return..."}</p>
             </div>
           </div>
         </section>
@@ -452,7 +493,7 @@ export default function Battle() {
                 </button>
                 <button onClick={() => setActiveTab("result")} className={`flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-mono border-b-2 transition-colors ${activeTab === "result" ? "border-[#f04432] text-[#e9e9eb]" : "border-transparent text-[#666973] hover:text-[#989ba5]"}`}>
                   Results
-                  {runState === "done" && <span className="ml-1 font-mono text-[10px]" style={{ color: vm?.color }}>{passedTests}/{totalTests}</span>}
+                  {runState === "done" && <span className="ml-1 font-mono text-[10px]" style={{ color: vm?.color }}>{totalTests === 0 ? "ERR" : `${passedTests}/${totalTests}`}</span>}
                 </button>
               </div>
               {runState === "running" && <div className="flex items-center gap-1.5 text-[#e1a759] text-[11px] font-mono"><Loader2 className="h-3 w-3 animate-spin" />{isSubmit ? "Submitting..." : "Running..."}</div>}
@@ -467,8 +508,19 @@ export default function Battle() {
 
             <div className="flex-1 overflow-hidden">
               {activeTab === "testcase" && (
-                <div className="h-full overflow-y-auto">
-                  {runState === "idle" && <div className="flex items-center gap-3 px-4 py-5 text-[#555862]"><Play className="h-4 w-4" /><p className="text-xs">Click <strong className="text-[#858893]">Run</strong> to execute against sample test cases.</p></div>}
+                <div className="h-full overflow-y-auto flex flex-col">
+                  {runState === "idle" && (
+                    <>
+                      <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-white/[.06] text-[#858893] bg-white/[.01]"><Play className="h-4 w-4" /><p className="text-xs">Click <strong className="text-[#a5a8b2]">Run</strong> to execute against these sample test cases.</p></div>
+                      {problem.examples?.length > 0 ? (
+                        <div className="flex-1 min-h-0 overflow-y-auto">
+                          <TestCasePanel results={problem.examples.map((ex: any, i: number) => ({ testIndex: i, input: ex.input, expectedOutput: ex.output }))} activeIndex={activeTestIdx} onSelect={setActiveTestIdx} />
+                        </div>
+                      ) : (
+                        <div className="px-4 py-5 text-[#555862] text-xs">No sample test cases available.</div>
+                      )}
+                    </>
+                  )}
                   {runState === "running" && <div className="flex items-center gap-3 px-4 py-5 text-[#e1a759]"><Loader2 className="h-4 w-4 animate-spin" /><p className="text-xs font-mono">Executing test cases...</p></div>}
                   {runState === "done" && testResults.length > 0 && <TestCasePanel results={testResults} activeIndex={activeTestIdx} onSelect={setActiveTestIdx} />}
                 </div>
@@ -479,16 +531,23 @@ export default function Battle() {
                   {runState === "running" && <div className="flex items-center gap-3 text-[#e1a759]"><Loader2 className="h-4 w-4 animate-spin" /><p className="text-xs font-mono">{isSubmit ? "Running all test cases..." : "Running sample tests..."}</p></div>}
                   {runState === "done" && (
                     <div className="space-y-4">
-                      <div className="flex items-center gap-4 flex-wrap">
-                        <div className="flex items-center gap-2 px-3 py-2 rounded border text-sm font-semibold" style={{ color: vm?.color, borderColor: `${vm?.color}40`, background: vm?.bg }}>
-                          {verdict === "accepted" ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                          {vm?.label}
+                      {totalTests === 0 ? (
+                        <div className="flex items-center gap-3 px-4 py-4 rounded border border-[#e48b87]/30 bg-[#e48b8708] text-[#e48b87]">
+                          <X className="h-4 w-4 shrink-0" />
+                          <p className="text-sm font-semibold">Judge service unavailable — try again</p>
                         </div>
-                        <div className="flex items-center gap-1 text-xs text-[#858893]">
-                          <span className="font-mono font-semibold text-[#d7d8dc]">{passedTests}</span><span>/</span><span className="font-mono font-semibold text-[#d7d8dc]">{totalTests}</span><span className="ml-1">tests passed</span>
+                      ) : (
+                        <div className="flex items-center gap-4 flex-wrap">
+                          <div className="flex items-center gap-2 px-3 py-2 rounded border text-sm font-semibold" style={{ color: vm?.color, borderColor: `${vm?.color}40`, background: vm?.bg }}>
+                            {verdict === "accepted" ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                            {vm?.label}
+                          </div>
+                          <div className="flex items-center gap-1 text-xs text-[#858893]">
+                            <span className="font-mono font-semibold text-[#d7d8dc]">{passedTests}</span><span>/</span><span className="font-mono font-semibold text-[#d7d8dc]">{totalTests}</span><span className="ml-1">tests passed</span>
+                          </div>
+                          {runtimeMs != null && <div className="flex items-center gap-1.5 text-xs text-[#858893]"><Clock className="h-3 w-3" />{runtimeMs} ms</div>}
                         </div>
-                        {runtimeMs != null && <div className="flex items-center gap-1.5 text-xs text-[#858893]"><Clock className="h-3 w-3" />{runtimeMs} ms</div>}
-                      </div>
+                      )}
                       {testResults.length > 0 && <TestCasePanel results={testResults} activeIndex={activeTestIdx} onSelect={setActiveTestIdx} />}
                     </div>
                   )}

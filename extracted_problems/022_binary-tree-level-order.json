@@ -1,0 +1,119 @@
+{
+  "schema_version": "1.0",
+  "id": "P022",
+  "slug": "binary-tree-level-order",
+  "title": "Binary Tree Level Order Traversal",
+  "difficulty": "MEDIUM",
+  "statement": "Return the node values level by level from top to bottom.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "EXACT_MATCH",
+    "unordered_output": false,
+    "mutates_input": false
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "List<List<Integer>> levelOrder(TreeNode root)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public List<List<Integer>> levelOrder(TreeNode root) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "root": [
+          3,
+          9,
+          20,
+          null,
+          null,
+          15,
+          7
+        ]
+      },
+      "expected_output": [
+        [
+          3
+        ],
+        [
+          9,
+          20
+        ],
+        [
+          15,
+          7
+        ]
+      ]
+    },
+    {
+      "input": {
+        "root": [
+          1
+        ]
+      },
+      "expected_output": [
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "input": {
+        "root": []
+      },
+      "expected_output": []
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "root": [
+          3,
+          9,
+          20,
+          null,
+          null,
+          15,
+          7
+        ]
+      },
+      "expected_output": [
+        [
+          3
+        ],
+        [
+          9,
+          20
+        ],
+        [
+          15,
+          7
+        ]
+      ]
+    },
+    {
+      "id": "H002",
+      "input": {
+        "root": [
+          1
+        ]
+      },
+      "expected_output": [
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "id": "H003",
+      "input": {
+        "root": []
+      },
+      "expected_output": []
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

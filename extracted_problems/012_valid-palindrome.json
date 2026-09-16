@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "id": "P012",
+  "slug": "valid-palindrome",
+  "title": "Valid Palindrome",
+  "difficulty": "EASY",
+  "statement": "Return true if the string reads the same forward and backward after ignoring non-alphanumeric characters and case.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "EXACT_MATCH",
+    "unordered_output": false,
+    "mutates_input": false
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "boolean isPalindrome(String s)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public boolean isPalindrome(String s) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "s": "A man, a plan, a canal: Panama"
+      },
+      "expected_output": true
+    },
+    {
+      "input": {
+        "s": "race a car"
+      },
+      "expected_output": false
+    },
+    {
+      "input": {
+        "s": " "
+      },
+      "expected_output": true
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "s": "A man, a plan, a canal: Panama"
+      },
+      "expected_output": true
+    },
+    {
+      "id": "H002",
+      "input": {
+        "s": "race a car"
+      },
+      "expected_output": false
+    },
+    {
+      "id": "H003",
+      "input": {
+        "s": " "
+      },
+      "expected_output": true
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

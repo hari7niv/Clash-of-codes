@@ -11,6 +11,7 @@ export interface RankTier {
 }
 
 export const RANK_TIERS: readonly RankTier[] = [
+  { name: 'Unranked', min: -1, max: -1, color: '#888888' },
   { name: 'Bronze', min: 0, max: 1199, color: '#cd7f32' },
   { name: 'Silver', min: 1200, max: 1399, color: '#c0c0c0' },
   { name: 'Gold', min: 1400, max: 1599, color: '#ffd700' },

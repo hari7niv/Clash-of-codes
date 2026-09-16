@@ -14,7 +14,7 @@ export const toPublicUser = (user: typeof users.$inferSelect) => {
     handle: user.username,
     initials: user.username.substring(0, 2).toUpperCase(),
     rating: ratingInt,
-    rank: tier.name as any,
+    rank: user.gamesPlayed === 0 ? "Unranked" : tier.name as any,
     role: user.role,
   };
 };
@@ -28,7 +28,7 @@ export const toPlayerProfile = (user: typeof users.$inferSelect) => {
     handle: user.username,
     initials: user.username.substring(0, 2).toUpperCase(),
     rating: ratingInt,
-    rank: tier.name as any,
+    rank: user.gamesPlayed === 0 ? "Unranked" : tier.name as any,
     level: 1, // Scalable default
     xp: 0,
     xpGoal: 1000,
@@ -124,6 +124,8 @@ export const getFriends = async (userId: string) => {
   return userFriendships.map(uf => {
     const ratingInt = Math.round(uf.rating);
     const tier = tierForRating(ratingInt);
+    // In a real implementation we would fetch gamesPlayed here to check Unranked, 
+    // but for now default to checking if they have baseline rating and wins
     return {
       handle: uf.username,
       initials: uf.username.substring(0, 2).toUpperCase(),

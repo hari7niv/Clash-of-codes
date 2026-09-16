@@ -40,6 +40,11 @@ export interface ResolveMatchRoomPayload {
   matchId: string;
 }
 
+export interface ForfeitMatchPayload {
+  roomId: string;
+  matchId: string;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Server -> Client                                                            */
 /* -------------------------------------------------------------------------- */
@@ -55,7 +60,7 @@ export interface MatchFoundPayload {
   roomId: string;
   matchId: string;
   problem: PublicProblem;
-  opponent: PublicUser;
+  opponents: PublicUser[];
   countdownMs: number;
 }
 
@@ -65,9 +70,10 @@ export interface MatchStartPayload {
   endsAt: number;
 }
 
-/** Emitted to the *other* player when someone's submission is judged. */
+/** Emitted to other players when someone's submission is judged. */
 export interface OpponentProgressPayload {
   roomId: string;
+  userId: string;
   verdict: Verdict;
   passedTests: number;
   totalTests: number;
@@ -103,7 +109,7 @@ export interface RoomStatePayload {
   roomId: string;
   phase: RoomPhase;
   problem: PublicProblem | null;
-  opponent: PublicUser | null;
+  opponents: PublicUser[];
   endsAt: number | null;
 }
 
@@ -126,6 +132,7 @@ export interface ClientToServerEvents {
   leave_queue: (payload: LeaveQueuePayload) => void;
   submit_code: (payload: SubmitCodePayload) => void;
   request_reconnect: (payload: RequestReconnectPayload) => void;
+  forfeit_match: (payload: ForfeitMatchPayload) => void;
   resolve_match_room: (payload: ResolveMatchRoomPayload) => void;
 }
 
@@ -156,6 +163,7 @@ export const SOCKET_EVENTS = {
   LEAVE_QUEUE: 'leave_queue',
   SUBMIT_CODE: 'submit_code',
   REQUEST_RECONNECT: 'request_reconnect',
+  FORFEIT_MATCH: 'forfeit_match',
   // server -> client
   QUEUE_JOINED: 'queue_joined',
   QUEUE_LEFT: 'queue_left',

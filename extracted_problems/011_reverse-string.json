@@ -1,0 +1,106 @@
+{
+  "schema_version": "1.0",
+  "id": "P011",
+  "slug": "reverse-string",
+  "title": "Reverse String",
+  "difficulty": "MEDIUM",
+  "statement": "Reverse a character array in place.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "EXACT_MATCH",
+    "unordered_output": false,
+    "mutates_input": true
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "void reverseString(char[] s)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public void reverseString(char[] s) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "s": [
+          "h",
+          "e",
+          "l",
+          "l",
+          "o"
+        ]
+      },
+      "expected_output": [
+        "o",
+        "l",
+        "l",
+        "e",
+        "h"
+      ]
+    },
+    {
+      "input": {
+        "s": [
+          "H",
+          "a",
+          "n",
+          "n",
+          "a",
+          "h"
+        ]
+      },
+      "expected_output": [
+        "h",
+        "a",
+        "n",
+        "n",
+        "a",
+        "H"
+      ]
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "s": [
+          "h",
+          "e",
+          "l",
+          "l",
+          "o"
+        ]
+      },
+      "expected_output": [
+        "o",
+        "l",
+        "l",
+        "e",
+        "h"
+      ]
+    },
+    {
+      "id": "H002",
+      "input": {
+        "s": [
+          "H",
+          "a",
+          "n",
+          "n",
+          "a",
+          "h"
+        ]
+      },
+      "expected_output": [
+        "h",
+        "a",
+        "n",
+        "n",
+        "a",
+        "H"
+      ]
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

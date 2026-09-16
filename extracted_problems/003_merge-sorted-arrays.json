@@ -1,0 +1,141 @@
+{
+  "schema_version": "1.0",
+  "id": "P003",
+  "slug": "merge-sorted-arrays",
+  "title": "Merge Sorted Arrays",
+  "difficulty": "MEDIUM",
+  "statement": "Merge two nondecreasing integer arrays into one nondecreasing array.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "EXACT_MATCH",
+    "unordered_output": false,
+    "mutates_input": false
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "int[] merge(int[] a, int[] b)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public int[] merge(int[] a, int[] b) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "a": [
+          1,
+          2,
+          4
+        ],
+        "b": [
+          1,
+          3,
+          4
+        ]
+      },
+      "expected_output": [
+        1,
+        1,
+        2,
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "input": {
+        "a": [],
+        "b": [
+          0
+        ]
+      },
+      "expected_output": [
+        0
+      ]
+    },
+    {
+      "input": {
+        "a": [
+          -5,
+          0,
+          9
+        ],
+        "b": [
+          -4,
+          2,
+          10
+        ]
+      },
+      "expected_output": [
+        -5,
+        -4,
+        0,
+        2,
+        9,
+        10
+      ]
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "a": [
+          1,
+          2,
+          4
+        ],
+        "b": [
+          1,
+          3,
+          4
+        ]
+      },
+      "expected_output": [
+        1,
+        1,
+        2,
+        3,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "H002",
+      "input": {
+        "a": [],
+        "b": [
+          0
+        ]
+      },
+      "expected_output": [
+        0
+      ]
+    },
+    {
+      "id": "H003",
+      "input": {
+        "a": [
+          -5,
+          0,
+          9
+        ],
+        "b": [
+          -4,
+          2,
+          10
+        ]
+      },
+      "expected_output": [
+        -5,
+        -4,
+        0,
+        2,
+        9,
+        10
+      ]
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

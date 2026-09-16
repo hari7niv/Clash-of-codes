@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "id": "P029",
+  "slug": "top-k-frequent",
+  "title": "Top K Frequent Elements",
+  "difficulty": "EASY",
+  "statement": "Return the k values with the highest frequencies. Any order is accepted.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "CUSTOM_VALIDATOR",
+    "validator": "sameTopKSet"
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "int[] topKFrequent(int[] nums, int k)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public int[] topKFrequent(int[] nums, int k) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "nums": [
+          1,
+          1,
+          1,
+          2,
+          2,
+          3
+        ],
+        "k": 2
+      },
+      "expected_output": [
+        1,
+        2
+      ]
+    },
+    {
+      "input": {
+        "nums": [
+          1
+        ],
+        "k": 1
+      },
+      "expected_output": [
+        1
+      ]
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "nums": [
+          1,
+          1,
+          1,
+          2,
+          2,
+          3
+        ],
+        "k": 2
+      },
+      "expected_output": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "H002",
+      "input": {
+        "nums": [
+          1
+        ],
+        "k": 1
+      },
+      "expected_output": [
+        1
+      ]
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

@@ -5,7 +5,7 @@ import crypto from "crypto";
 import { eq, and } from "drizzle-orm";
 import { db } from "../../db/client.js";
 import { users, refreshTokens, passwordResetTokens, userProgress } from "../../db/schema/users.js";
-import { createUser, getUserByEmail, toPublicUser } from "../../repositories/user.repo.js";
+import { createUser, getUserByEmail, getUserByUsername, toPublicUser } from "../../repositories/user.repo.js";
 import { registerSchema, loginSchema } from "@clashofcode/shared";
 import { emailWelcome, emailPasswordReset } from "../../services/email.service.js";
 
@@ -82,9 +82,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   app.post("/login", async (request, reply) => {
     try {
       const data = loginSchema.parse(request.body);
-      const normalizedEmail = data.email.trim().toLowerCase();
+      const identifier = data.email.trim().toLowerCase();
 
-      const rawUser = await getUserByEmail(normalizedEmail);
+      const rawUser = identifier.includes("@") 
+        ? await getUserByEmail(identifier) 
+        : await getUserByUsername(identifier);
+
       if (!rawUser) {
         return reply.code(401).send({ error: { code: "UNAUTHORIZED", message: "Invalid credentials" } });
       }

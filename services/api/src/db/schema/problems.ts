@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
 
 export const problems = pgTable("problems", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -10,6 +10,9 @@ export const problems = pgTable("problems", {
   timeLimitMs: integer("time_limit_ms").default(2000).notNull(),
   memoryLimitKb: integer("memory_limit_kb").default(262144).notNull(),
   tags: text("tags").array().notNull().default([]),
+  examples: jsonb("examples").default([]).notNull(),
+  constraints: text("constraints").array().default([]).notNull(),
+  starterCode: jsonb("starter_code").default({}).notNull(),
   isDraft: boolean("is_draft").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

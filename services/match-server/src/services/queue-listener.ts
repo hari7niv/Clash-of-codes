@@ -114,13 +114,9 @@ export async function listenToMatchQueue(
         }
 
         const submitterId = submission.userId;
-        const opponentId = room.playerIds.find((id) => id !== submitterId);
-
-        if (!opponentId) {
-          console.warn(
-            `[Match Server] Could not find opponent for submission in room ${roomId}`
-          );
-          return;
+        const opponentIds = room.playerIds.filter((id) => id !== submitterId);
+        if (opponentIds.length === 0) {
+          console.warn(`[Match Server] Could not find any opponents for submission in room ${roomId}`);
         }
 
         const submitterSocketId = matchHandler.getSocketForUser(submitterId);
@@ -139,14 +135,17 @@ export async function listenToMatchQueue(
           });
         }
 
-        const opponentSocketId = matchHandler.getSocketForUser(opponentId);
-        if (opponentSocketId) {
-          io.to(opponentSocketId).emit(SOCKET_EVENTS.OPPONENT_PROGRESS, {
-            roomId,
-            verdict: verdict.verdict || "error",
-            passedTests: verdict.passedTests || 0,
-            totalTests: verdict.totalTests || 0,
-          });
+        for (const opponentId of opponentIds) {
+          const opponentSocketId = matchHandler.getSocketForUser(opponentId);
+          if (opponentSocketId) {
+            io.to(opponentSocketId).emit(SOCKET_EVENTS.OPPONENT_PROGRESS, {
+              roomId,
+              userId: submitterId,
+              verdict: verdict.verdict || "error",
+              passedTests: verdict.passedTests || 0,
+              totalTests: verdict.totalTests || 0,
+            });
+          }
         }
 
         console.log(

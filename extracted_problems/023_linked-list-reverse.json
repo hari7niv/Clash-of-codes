@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "id": "P023",
+  "slug": "linked-list-reverse",
+  "title": "Reverse Linked List",
+  "difficulty": "MEDIUM",
+  "statement": "Reverse a singly linked list and return the new head.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "EXACT_MATCH",
+    "unordered_output": false,
+    "mutates_input": false
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "ListNode reverseList(ListNode head)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public ListNode reverseList(ListNode head) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "head": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      },
+      "expected_output": [
+        5,
+        4,
+        3,
+        2,
+        1
+      ]
+    },
+    {
+      "input": {
+        "head": [
+          1,
+          2
+        ]
+      },
+      "expected_output": [
+        2,
+        1
+      ]
+    },
+    {
+      "input": {
+        "head": []
+      },
+      "expected_output": []
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "head": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      },
+      "expected_output": [
+        5,
+        4,
+        3,
+        2,
+        1
+      ]
+    },
+    {
+      "id": "H002",
+      "input": {
+        "head": [
+          1,
+          2
+        ]
+      },
+      "expected_output": [
+        2,
+        1
+      ]
+    },
+    {
+      "id": "H003",
+      "input": {
+        "head": []
+      },
+      "expected_output": []
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

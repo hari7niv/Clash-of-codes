@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "id": "P002",
+  "slug": "valid-parentheses",
+  "title": "Valid Parentheses",
+  "difficulty": "MEDIUM",
+  "statement": "Return true if every opening bracket is correctly closed in the proper order.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "EXACT_MATCH",
+    "unordered_output": false,
+    "mutates_input": false
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "boolean isValid(String s)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public boolean isValid(String s) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "s": "()[]{}"
+      },
+      "expected_output": true
+    },
+    {
+      "input": {
+        "s": "([)]"
+      },
+      "expected_output": false
+    },
+    {
+      "input": {
+        "s": "{[]}"
+      },
+      "expected_output": true
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "s": "()[]{}"
+      },
+      "expected_output": true
+    },
+    {
+      "id": "H002",
+      "input": {
+        "s": "([)]"
+      },
+      "expected_output": false
+    },
+    {
+      "id": "H003",
+      "input": {
+        "s": "{[]}"
+      },
+      "expected_output": true
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

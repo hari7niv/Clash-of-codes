@@ -1,0 +1,105 @@
+{
+  "schema_version": "1.0",
+  "id": "P006",
+  "slug": "binary-search",
+  "title": "Binary Search",
+  "difficulty": "MEDIUM",
+  "statement": "Given a sorted array and a target, return its index, or -1 if it is absent.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "EXACT_MATCH",
+    "unordered_output": false,
+    "mutates_input": false
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "int search(int[] nums, int target)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public int search(int[] nums, int target) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "nums": [
+          -1,
+          0,
+          3,
+          5,
+          9,
+          12
+        ],
+        "target": 9
+      },
+      "expected_output": 4
+    },
+    {
+      "input": {
+        "nums": [
+          -1,
+          0,
+          3,
+          5,
+          9,
+          12
+        ],
+        "target": 2
+      },
+      "expected_output": -1
+    },
+    {
+      "input": {
+        "nums": [
+          5
+        ],
+        "target": 5
+      },
+      "expected_output": 0
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "nums": [
+          -1,
+          0,
+          3,
+          5,
+          9,
+          12
+        ],
+        "target": 9
+      },
+      "expected_output": 4
+    },
+    {
+      "id": "H002",
+      "input": {
+        "nums": [
+          -1,
+          0,
+          3,
+          5,
+          9,
+          12
+        ],
+        "target": 2
+      },
+      "expected_output": -1
+    },
+    {
+      "id": "H003",
+      "input": {
+        "nums": [
+          5
+        ],
+        "target": 5
+      },
+      "expected_output": 0
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

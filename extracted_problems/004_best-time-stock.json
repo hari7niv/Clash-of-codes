@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0",
+  "id": "P004",
+  "slug": "best-time-stock",
+  "title": "Best Time to Buy and Sell Stock",
+  "difficulty": "EASY",
+  "statement": "Choose one day to buy and a later day to sell to maximize profit. Return the maximum profit.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "EXACT_MATCH",
+    "unordered_output": false,
+    "mutates_input": false
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "int maxProfit(int[] prices)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public int maxProfit(int[] prices) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "prices": [
+          7,
+          1,
+          5,
+          3,
+          6,
+          4
+        ]
+      },
+      "expected_output": 5
+    },
+    {
+      "input": {
+        "prices": [
+          7,
+          6,
+          4,
+          3,
+          1
+        ]
+      },
+      "expected_output": 0
+    },
+    {
+      "input": {
+        "prices": [
+          2,
+          4,
+          1
+        ]
+      },
+      "expected_output": 2
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "prices": [
+          7,
+          1,
+          5,
+          3,
+          6,
+          4
+        ]
+      },
+      "expected_output": 5
+    },
+    {
+      "id": "H002",
+      "input": {
+        "prices": [
+          7,
+          6,
+          4,
+          3,
+          1
+        ]
+      },
+      "expected_output": 0
+    },
+    {
+      "id": "H003",
+      "input": {
+        "prices": [
+          2,
+          4,
+          1
+        ]
+      },
+      "expected_output": 2
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

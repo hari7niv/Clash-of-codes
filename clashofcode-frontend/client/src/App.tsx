@@ -32,6 +32,8 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import Tournaments from "@/pages/Tournaments";
 import TournamentDetails from "@/pages/TournamentDetails";
 import Notifications from "@/pages/Notifications";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import { Route, Switch, Redirect, useLocation } from "wouter";
 
 function PrivateRoute({ component: Component, ...rest }: { component: any; path?: string }) {
@@ -65,6 +67,7 @@ function PrivateRouter() {
         <Route path="/room/:code"><PrivateRoute component={RoomLobby} /></Route>
         <Route path="/battle/:matchId"><PrivateRoute component={Battle} /></Route>
         <Route path="/battle"><PrivateRoute component={Battle} /></Route>
+        <Route path="/result/:matchId"><PrivateRoute component={Result} /></Route>
         <Route path="/result"><PrivateRoute component={Result} /></Route>
         <Route path="/practice/:problemId"><PrivateRoute component={PracticeProblem} /></Route>
         <Route path="/practice"><PrivateRoute component={Practice} /></Route>
@@ -90,6 +93,8 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
       <Route path="/oauth/callback" component={OAuthCallback} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route component={PrivateRouter} />
     </Switch>
   ); 

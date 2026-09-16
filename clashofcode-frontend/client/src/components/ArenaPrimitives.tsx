@@ -17,6 +17,9 @@ export function MatchLine({ label, className }: { label?: string; className?: st
 }
 
 export function RankBadge({ rank, className }: { rank: string; className?: string }) {
+  if (rank === "Unranked") {
+    return <span className={cn("rank-badge opacity-60", className)}><span className="text-[10px] mr-1">?</span>UNRANKED</span>;
+  }
   return <span className={cn("rank-badge", className)}><span className="rank-notch" />{rank}</span>;
 }
 

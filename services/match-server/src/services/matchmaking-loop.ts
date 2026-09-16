@@ -253,16 +253,16 @@ async function runMatchmakingCycle(
             roomId,
             matchId,
             problem: publicProblem,
-            opponent: user2,
-            countdownMs: 3_000,
+            opponents: [user2],
+            countdownMs: process.env.COUNTDOWN_MS ? parseInt(process.env.COUNTDOWN_MS) : 5000,
           };
 
           const matchFoundPayload2: MatchFoundPayload = {
             roomId,
             matchId,
             problem: publicProblem,
-            opponent: user1,
-            countdownMs: 3_000,
+            opponents: [user1],
+            countdownMs: process.env.COUNTDOWN_MS ? parseInt(process.env.COUNTDOWN_MS) : 5000,
           };
 
           // Send to player 1's socket

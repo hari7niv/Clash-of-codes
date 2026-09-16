@@ -88,8 +88,8 @@ const completMatchInternal = async (matchId: string, tx: any) => {
     throw new Error("Player 1 not found");
   }
 
-  // Handle single player match (vs practice/AI)
-  if (!match.playerTwoId) {
+  // Handle single player match or non-ranked match
+  if (!match.playerTwoId || match.mode !== "ranked") {
     // Update match status
     await tx
       .update(matches)

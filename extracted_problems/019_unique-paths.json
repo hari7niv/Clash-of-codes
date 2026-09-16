@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0",
+  "id": "P019",
+  "slug": "unique-paths",
+  "title": "Unique Paths",
+  "difficulty": "MEDIUM",
+  "statement": "A robot starts at the top-left of an m by n grid and can move only right or down. Count paths to the bottom-right.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "EXACT_MATCH",
+    "unordered_output": false,
+    "mutates_input": false
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "int uniquePaths(int m, int n)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public int uniquePaths(int m, int n) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "m": 3,
+        "n": 7
+      },
+      "expected_output": 28
+    },
+    {
+      "input": {
+        "m": 3,
+        "n": 2
+      },
+      "expected_output": 3
+    },
+    {
+      "input": {
+        "m": 1,
+        "n": 1
+      },
+      "expected_output": 1
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "m": 3,
+        "n": 7
+      },
+      "expected_output": 28
+    },
+    {
+      "id": "H002",
+      "input": {
+        "m": 3,
+        "n": 2
+      },
+      "expected_output": 3
+    },
+    {
+      "id": "H003",
+      "input": {
+        "m": 1,
+        "n": 1
+      },
+      "expected_output": 1
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

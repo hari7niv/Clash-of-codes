@@ -2,7 +2,7 @@ import { db } from "../db/client.js";
 import { matches, submissions, ratingsHistory } from "../db/schema/matches.js";
 import { problems } from "../db/schema/problems.js";
 import { users } from "../db/schema/users.js";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 
 export const getMatchById = async (matchId: string, currentUserId?: string) => {
   const [match] = await db.select().from(matches).where(eq(matches.id, matchId));
@@ -10,20 +10,34 @@ export const getMatchById = async (matchId: string, currentUserId?: string) => {
 
   const [problem] = await db.select().from(problems).where(eq(problems.id, match.problemId));
   
-  // Dynamically select the opponent depending on who is requesting the data
-  let opponentId = match.playerTwoId;
-  if (currentUserId && match.playerTwoId === currentUserId) {
-    opponentId = match.playerOneId;
-  }
+  let opponents: any[] = [];
   
-  const [opponent] = opponentId 
-    ? await db.select().from(users).where(eq(users.id, opponentId))
-    : [null];
+  if (match.mode === "room" && match.roomCode) {
+    // For room matches, fetch all other members of the room
+    const members = await db.execute(
+      sql`SELECT u.id, u.username, u.rating, u.games_played, u.wins, u.losses, u.draws 
+          FROM room_members rm 
+          JOIN users u ON rm.user_id = u.id 
+          WHERE rm.room_id = (SELECT id FROM rooms WHERE code = ${match.roomCode})
+          AND rm.user_id != ${currentUserId || ''}`
+    );
+    opponents = members.rows;
+  } else {
+    // Dynamically select the opponent depending on who is requesting the data
+    let opponentId = match.playerTwoId;
+    if (currentUserId && match.playerTwoId === currentUserId) {
+      opponentId = match.playerOneId;
+    }
+    if (opponentId) {
+      const [opp] = await db.select().from(users).where(eq(users.id, opponentId));
+      if (opp) opponents.push(opp);
+    }
+  }
 
   return {
     match,
     problem,
-    opponent,
+    opponents,
   };
 };
 

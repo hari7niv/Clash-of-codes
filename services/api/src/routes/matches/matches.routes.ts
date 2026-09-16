@@ -5,7 +5,7 @@ import { completeMatch } from "../../services/rating-calculator.js";
 import { db } from "../../db/client.js";
 import { submissions } from "../../db/schema/matches.js";
 import { pasteEvents } from "../../db/schema/events.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export const matchRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("onRequest", async (request, reply) => {
@@ -32,7 +32,18 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // Verify requesting user is part of the match
-    const isParticipant = data.match.playerOneId === userId || data.match.playerTwoId === userId;
+    let isParticipant = false;
+    if (data.match.mode === "room") {
+      isParticipant = data.match.playerOneId === userId || data.opponents.some((o: any) => o.id === userId) || (data.match.playerTwoId === userId);
+      // Wait, if userId is the current user, they are excluded from `opponents` because `rm.user_id != currentUserId`!
+      // So I just need to check if they are playerOne, playerTwo, or if there's a record in room_members for this user.
+      // Actually, since they are in roomMembers, let's just query roomMembers to verify participation for room mode!
+      const [member] = await db.execute(sql`SELECT 1 FROM room_members rm JOIN rooms r ON rm.room_id = r.id WHERE r.code = ${data.match.roomCode} AND rm.user_id = ${userId}`);
+      isParticipant = !!member;
+    } else {
+      isParticipant = data.match.playerOneId === userId || data.match.playerTwoId === userId;
+    }
+
     if (!isParticipant) {
       return reply.code(403).send({ error: { code: "FORBIDDEN", message: "You are not authorized to view this match" } });
     }
@@ -63,11 +74,11 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
           typescript: "function solve() {}"
         }
       } : null,
-      opponent: data.opponent ? {
-        handle: data.opponent.username,
-        initials: data.opponent.username.substring(0, 2).toUpperCase(),
-        rating: Math.round(data.opponent.rating)
-      } : { handle: "Opponent", initials: "OP", rating: 1500 },
+      opponents: data.opponents.map((opp: any) => ({
+        handle: opp.username,
+        initials: opp.username.substring(0, 2).toUpperCase(),
+        rating: Math.round(opp.rating || 1500)
+      })),
       timeRemainingSeconds,
       endsAt // Include absolute end time for client-side safety
     };
@@ -90,7 +101,14 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
       }
 
       // Check if user is part of the match
-      const belongsToMatch = matchData.match.playerOneId === userId || matchData.match.playerTwoId === userId;
+      let belongsToMatch = false;
+      if (matchData.match.mode === "room") {
+        const [member] = await db.execute(sql`SELECT 1 FROM room_members rm JOIN rooms r ON rm.room_id = r.id WHERE r.code = ${matchData.match.roomCode} AND rm.user_id = ${userId}`);
+        belongsToMatch = !!member;
+      } else {
+        belongsToMatch = matchData.match.playerOneId === userId || matchData.match.playerTwoId === userId;
+      }
+
       if (!belongsToMatch) {
         return reply.code(403).send({ error: { code: "FORBIDDEN", message: "You are not a participant in this match" } });
       }
@@ -160,9 +178,16 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
       }
 
       // Verify user is part of match
-      const isParticipant = matchData.match.playerOneId === userId || matchData.match.playerTwoId === userId;
+      let isParticipant = false;
+      if (matchData.match.mode === "room") {
+        const [member] = await db.execute(sql`SELECT 1 FROM room_members rm JOIN rooms r ON rm.room_id = r.id WHERE r.code = ${matchData.match.roomCode} AND rm.user_id = ${userId}`);
+        isParticipant = !!member;
+      } else {
+        isParticipant = matchData.match.playerOneId === userId || matchData.match.playerTwoId === userId;
+      }
+
       if (!isParticipant) {
-        return reply.code(403).send({ error: { code: "FORBIDDEN", message: "Not authorized" } });
+        return reply.code(403).send({ error: { code: "FORBIDDEN", message: "You are not a participant in this match" } });
       }
 
       // FIX P3.4: Add server-side validation to prevent premature completion

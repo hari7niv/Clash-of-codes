@@ -1,0 +1,89 @@
+{
+  "schema_version": "1.0",
+  "id": "P018",
+  "slug": "coin-change",
+  "title": "Coin Change",
+  "difficulty": "MEDIUM",
+  "statement": "Return the minimum number of coins needed to form an amount, or -1 if impossible.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "EXACT_MATCH",
+    "unordered_output": false,
+    "mutates_input": false
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "int coinChange(int[] coins, int amount)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public int coinChange(int[] coins, int amount) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "coins": [
+          1,
+          2,
+          5
+        ],
+        "amount": 11
+      },
+      "expected_output": 3
+    },
+    {
+      "input": {
+        "coins": [
+          2
+        ],
+        "amount": 3
+      },
+      "expected_output": -1
+    },
+    {
+      "input": {
+        "coins": [
+          1
+        ],
+        "amount": 0
+      },
+      "expected_output": 0
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "coins": [
+          1,
+          2,
+          5
+        ],
+        "amount": 11
+      },
+      "expected_output": 3
+    },
+    {
+      "id": "H002",
+      "input": {
+        "coins": [
+          2
+        ],
+        "amount": 3
+      },
+      "expected_output": -1
+    },
+    {
+      "id": "H003",
+      "input": {
+        "coins": [
+          1
+        ],
+        "amount": 0
+      },
+      "expected_output": 0
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

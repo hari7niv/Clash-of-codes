@@ -1,0 +1,91 @@
+{
+  "schema_version": "1.0",
+  "id": "P020",
+  "slug": "maximum-depth-tree",
+  "title": "Maximum Depth of Binary Tree",
+  "difficulty": "EASY",
+  "statement": "Return the number of nodes on the longest root-to-leaf path.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "EXACT_MATCH",
+    "unordered_output": false,
+    "mutates_input": false
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "int maxDepth(TreeNode root)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public int maxDepth(TreeNode root) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "root": [
+          3,
+          9,
+          20,
+          null,
+          null,
+          15,
+          7
+        ]
+      },
+      "expected_output": 3
+    },
+    {
+      "input": {
+        "root": [
+          1,
+          null,
+          2
+        ]
+      },
+      "expected_output": 2
+    },
+    {
+      "input": {
+        "root": []
+      },
+      "expected_output": 0
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "root": [
+          3,
+          9,
+          20,
+          null,
+          null,
+          15,
+          7
+        ]
+      },
+      "expected_output": 3
+    },
+    {
+      "id": "H002",
+      "input": {
+        "root": [
+          1,
+          null,
+          2
+        ]
+      },
+      "expected_output": 2
+    },
+    {
+      "id": "H003",
+      "input": {
+        "root": []
+      },
+      "expected_output": 0
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

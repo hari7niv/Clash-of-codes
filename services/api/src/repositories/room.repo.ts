@@ -1,7 +1,7 @@
 import { db } from "../db/client.js";
 import { rooms, roomMembers, matches } from "../db/schema/matches.js";
 import { users } from "../db/schema/users.js";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import { tierForRating } from "@clashofcode/shared";
 
@@ -91,7 +91,7 @@ export const getRoomByCode = async (code: string) => {
       .select({ id: matches.id })
       .from(matches)
       .where(eq(matches.roomCode, code))
-      .orderBy(matches.createdAt);
+      .orderBy(desc(matches.createdAt));
     
     if (latestMatch) {
       matchId = latestMatch.id;

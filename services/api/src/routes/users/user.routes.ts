@@ -29,13 +29,14 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     
     const ratingInt = Math.round(user.rating);
     const tier = tierForRating(ratingInt);
+    const rank = user.gamesPlayed === 0 ? "Unranked" : tier.name;
     
     return {
       name: user.username,
       handle: user.username,
       initials: user.username.substring(0, 2).toUpperCase(),
       rating: ratingInt,
-      rank: tier.name,
+      rank: rank,
       level: progress?.level ?? 1,
       xp: progress?.xp ?? 0,
       xpGoal: progress?.xpGoal ?? 1000,

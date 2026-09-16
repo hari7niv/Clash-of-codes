@@ -25,7 +25,7 @@ export interface CreateSubmissionResult {
 }
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
-const JUDGE_QUEUE_NAME = process.env.JUDGE_QUEUE_NAME || "judge_submissions";
+const JUDGE_QUEUE_NAME = process.env.JUDGE_QUEUE_NAME || "judge";
 
 /**
  * Validates and creates a submission

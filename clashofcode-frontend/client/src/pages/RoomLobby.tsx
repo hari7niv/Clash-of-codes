@@ -18,8 +18,9 @@ export default function RoomLobby() {
   const code = location.match(/\/room\/([^?]+)/)?.[1]?.toUpperCase() ?? "";
   const { room, player, loading, error } = useRoomData(code);
   
-  const mode = search.get("mode") ?? "arena";
-  const max = mode === "solo" ? "1" : search.get("max") ?? "4";
+  const mode = room?.mode ?? "arena";
+  const capacity = room?.capacity ?? 4;
+  const max = mode === "solo" ? 1 : capacity;
   const guestName = search.get("guest") === "1" ? (search.get("alias") ?? "Guest Solver") : null;
   const [participants, setParticipants] = useState<Participant[]>([]);
 

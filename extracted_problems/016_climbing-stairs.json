@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "id": "P016",
+  "slug": "climbing-stairs",
+  "title": "Climbing Stairs",
+  "difficulty": "EASY",
+  "statement": "There are n steps. Each move advances one or two steps. Return the number of distinct ways to reach the top.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "EXACT_MATCH",
+    "unordered_output": false,
+    "mutates_input": false
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "int climbStairs(int n)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public int climbStairs(int n) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "n": 2
+      },
+      "expected_output": 2
+    },
+    {
+      "input": {
+        "n": 3
+      },
+      "expected_output": 3
+    },
+    {
+      "input": {
+        "n": 5
+      },
+      "expected_output": 8
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "n": 2
+      },
+      "expected_output": 2
+    },
+    {
+      "id": "H002",
+      "input": {
+        "n": 3
+      },
+      "expected_output": 3
+    },
+    {
+      "id": "H003",
+      "input": {
+        "n": 5
+      },
+      "expected_output": 8
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

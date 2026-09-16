@@ -3,11 +3,13 @@
  * decisive arena language and exposes validation directly where new players need it.
  */
 import PublicShell from "@/components/PublicShell";
-import { ArrowRight, Crosshair, Sparkles } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { ArrowRight, Crosshair, Sparkles, Github, Mail, Eye, EyeOff } from "lucide-react";
+import { FormEvent, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
 
 type Errors = { username?: string; email?: string; password?: string; confirm?: string; dateOfBirth?: string; general?: string };
 const validEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -22,6 +24,13 @@ export default function Signup() {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [errors, setErrors] = useState<Errors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [oauthProviders, setOauthProviders] = useState<{ github: boolean; google: boolean }>({ github: false, google: false });
+  
+  useEffect(() => {
+    api.get("/auth/oauth/providers").then(r => setOauthProviders(r.data)).catch(() => {});
+  }, []);
   
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -106,11 +115,21 @@ export default function Signup() {
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label>Password
-              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="new-password" aria-invalid={Boolean(errors.password)} className={errors.password ? "is-invalid" : ""} placeholder="8+ characters" />
+              <div className="relative">
+                <input value={password} onChange={(event) => setPassword(event.target.value)} type={showPassword ? "text" : "password"} autoComplete="new-password" aria-invalid={Boolean(errors.password)} className={errors.password ? "is-invalid w-full pr-10" : "w-full pr-10"} placeholder="8+ characters" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#747783] hover:text-[#c9cbd1] transition-colors focus:outline-none" tabIndex={-1}>
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               {errors.password && <span className="field-error">{errors.password}</span>}
             </label>
             <label>Confirm password
-              <input value={confirm} onChange={(event) => setConfirm(event.target.value)} type="password" autoComplete="new-password" aria-invalid={Boolean(errors.confirm)} className={errors.confirm ? "is-invalid" : ""} placeholder="Repeat password" />
+              <div className="relative">
+                <input value={confirm} onChange={(event) => setConfirm(event.target.value)} type={showConfirm ? "text" : "password"} autoComplete="new-password" aria-invalid={Boolean(errors.confirm)} className={errors.confirm ? "is-invalid w-full pr-10" : "w-full pr-10"} placeholder="Repeat password" />
+                <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#747783] hover:text-[#c9cbd1] transition-colors focus:outline-none" tabIndex={-1}>
+                  {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               {errors.confirm && <span className="field-error">{errors.confirm}</span>}
             </label>
           </div>
@@ -119,6 +138,15 @@ export default function Signup() {
           </div>
         </form>
         <p className="auth-switch">Already in the arena? <Link href="/login">Log in</Link></p>
+        <div className="mt-5 border-t border-white/10 pt-5 space-y-2">
+          <p className="text-center font-mono text-[10px] text-[#747783] tracking-[.12em] mb-3">OR CONTINUE WITH</p>
+          <a href={oauthProviders.github ? `${API_BASE}/auth/oauth/github` : "#"} className={`flex w-full items-center justify-center gap-2 rounded border border-white/15 bg-white/[.04] py-2.5 text-sm font-medium text-white transition-colors ${!oauthProviders.github ? "opacity-40 pointer-events-none" : "hover:bg-white/10"}`}>
+            <Github className="h-4 w-4" /> GitHub {!oauthProviders.github && <span className="text-[10px] text-[#747783] font-mono ml-1">(Not configured)</span>}
+          </a>
+          <a href={oauthProviders.google ? `${API_BASE}/auth/oauth/google` : "#"} className={`flex w-full items-center justify-center gap-2 rounded border border-white/15 bg-white/[.04] py-2.5 text-sm font-medium text-white transition-colors ${!oauthProviders.google ? "opacity-40 pointer-events-none" : "hover:bg-white/10"}`}>
+            <Mail className="h-4 w-4" /> Google {!oauthProviders.google && <span className="text-[10px] text-[#747783] font-mono ml-1">(Not configured)</span>}
+          </a>
+        </div>
       </section>
     </main>
   </PublicShell>;

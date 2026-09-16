@@ -209,9 +209,9 @@ export async function completeMatch(
     );
 
     // Only calculate ratings for ranked matches with two players
-    if (!playerTwoId) {
+    if (!playerTwoId || match.mode !== "ranked") {
       await client.query("COMMIT");
-      console.log(`[Match Completion] ✅ Match ${matchId} completed (solo/practice mode, no ratings)`);
+      console.log(`[Match Completion] ✅ Match ${matchId} completed (mode=${match.mode}, no ratings)`);
       return {
         success: true,
         matchId,

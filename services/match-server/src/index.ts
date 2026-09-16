@@ -19,6 +19,8 @@ import type {
   LeaveQueuePayload,
   SubmitCodePayload,
   RequestReconnectPayload,
+  ForfeitMatchPayload,
+  ResolveMatchRoomPayload,
   PublicProblem,
   PublicUser,
 } from "@clashofcode/shared";
@@ -358,8 +360,48 @@ io.on("connection", (socket) => {
       );
 
       // Verify user is participant in this match
+       // If we don't have it in memory/redis, try to hydrate from DB
+      let roomId = await matchHandler.getRoomIdForMatch(matchId);
+      if (!roomId) {
+        try {
+          const res = await pool.query(
+            "SELECT id, problem_id, player_one_id, player_two_id, mode, room_code FROM matches WHERE id = $1",
+            [matchId]
+          );
+          
+          if (res.rows.length > 0) {
+            const matchRow = res.rows[0];
+            roomId = uuidv4(); // Generate new roomId for this loaded match
+            
+            let playerIds: string[] = [];
+            
+            if (matchRow.mode === "room" && matchRow.room_code) {
+              const membersRes = await pool.query(
+                "SELECT user_id FROM room_members rm JOIN rooms r ON rm.room_id = r.id WHERE r.code = $1",
+                [matchRow.room_code]
+              );
+              playerIds = membersRes.rows.map((row: any) => row.user_id);
+            } else {
+              playerIds = [matchRow.player_one_id];
+              if (matchRow.player_two_id) playerIds.push(matchRow.player_two_id);
+            }
+            
+            // Store it in matchHandler and Redis
+            await matchHandler.createRoom(
+              roomId,
+              matchId,
+              playerIds,
+              matchRow.problem_id
+            );
+          }
+        } catch (dbErr: any) {
+          console.error(`[Match Server] Failed to hydrate room for match ${matchId}:`, dbErr.message);
+        }
+      }
+
+      let isParticipant = false;
       const matchRes = await pool.query(
-        "SELECT id, player_one_id, player_two_id, status FROM matches WHERE id = $1",
+        "SELECT id, player_one_id, player_two_id, status, mode, room_code FROM matches WHERE id = $1",
         [matchId]
       );
 
@@ -371,7 +413,16 @@ io.on("connection", (socket) => {
       }
 
       const match = matchRes.rows[0];
-      const isParticipant = match.player_one_id === userId || match.player_two_id === userId;
+      
+      if (match.mode === "room" && match.room_code) {
+        const membersRes = await pool.query(
+          "SELECT 1 FROM room_members rm JOIN rooms r ON rm.room_id = r.id WHERE r.code = $1 AND rm.user_id = $2",
+          [match.room_code, userId]
+        );
+        isParticipant = membersRes.rows.length > 0;
+      } else {
+        isParticipant = match.player_one_id === userId || match.player_two_id === userId;
+      }
 
       if (!isParticipant) {
         return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
@@ -379,10 +430,12 @@ io.on("connection", (socket) => {
           message: "You are not a participant in this match",
         });
       }
-
-      // Lookup roomId from Redis
-      const roomId = await matchHandler.getRoomIdForMatch(matchId);
       
+      if (!roomId) {
+        // Fallback: look up again if hydration somehow missed assigning it locally
+        roomId = await matchHandler.getRoomIdForMatch(matchId);
+      }
+
       if (!roomId) {
         return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
           code: "ROOM_NOT_FOUND",
@@ -485,7 +538,7 @@ io.on("connection", (socket) => {
 
       // Fetch problem and opponent details for full room snapshot
       let publicProblem: PublicProblem | null = null;
-      let opponent: PublicUser | null = null;
+
 
       const problemRes = await pool.query(
         "SELECT id, slug, title, statement, difficulty, rating, time_limit_ms, memory_limit_kb, tags FROM problems WHERE id = $1",
@@ -513,15 +566,15 @@ io.on("connection", (socket) => {
         };
       }
 
-      const opponentId = room.playerIds.find((id) => id !== userId);
-      if (opponentId) {
+      const opponentIds = room.playerIds.filter((id) => id !== userId);
+      const opponents: PublicUser[] = [];
+      if (opponentIds.length > 0) {
         const oppRes = await pool.query(
-          "SELECT id, username, rating, games_played, wins, losses, draws FROM users WHERE id = $1",
-          [opponentId]
+          "SELECT id, username, rating, games_played, wins, losses, draws FROM users WHERE id = ANY($1::uuid[])",
+          [opponentIds]
         );
-        if (oppRes.rows.length > 0) {
-          const u = oppRes.rows[0];
-          opponent = {
+        for (const u of oppRes.rows) {
+          opponents.push({
             id: u.id,
             username: u.username,
             rating: Math.round(u.rating),
@@ -529,7 +582,7 @@ io.on("connection", (socket) => {
             wins: u.wins ?? 0,
             losses: u.losses ?? 0,
             draws: u.draws ?? 0,
-          };
+          });
         }
       }
 
@@ -538,7 +591,7 @@ io.on("connection", (socket) => {
         roomId: room.roomId,
         phase: room.phase,
         problem: publicProblem,
-        opponent,
+        opponents,
         endsAt: room.endsAt,
       });
 
@@ -549,6 +602,103 @@ io.on("connection", (socket) => {
       console.error(`[Match Server] Error in request_reconnect:`, err.message);
       socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
         code: "RECONNECT_FAILED",
+        message: err.message,
+      });
+    }
+  });
+
+  /**
+   * CANONICAL EVENT: forfeit_match
+   * Client forfeits the active match
+   */
+  socket.on(SOCKET_EVENTS.FORFEIT_MATCH, async (payload: ForfeitMatchPayload) => {
+    try {
+      const { roomId, matchId } = payload;
+      const userId = socket.data.userId;
+
+      if (!userId) {
+        return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+          code: "NOT_AUTHENTICATED",
+          message: "User not authenticated",
+        });
+      }
+
+      console.log(`[Match Server] User ${userId} forfeiting match ${matchId} in room ${roomId}`);
+
+      const room = matchHandler.getRoom(roomId);
+      if (!room || room.matchId !== matchId) {
+        return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+          code: "ROOM_NOT_FOUND",
+          message: "Room not found or match mismatch",
+        });
+      }
+
+      // Check if user is in the room
+      if (!room.playerIds.includes(userId)) {
+        return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+          code: "NOT_PARTICIPANT",
+          message: "User is not a participant in this match",
+        });
+      }
+
+      // If match is still active or judging, complete it with forfeit
+      if (room.phase === "active" || room.phase === "judging") {
+        const winnerId = room.playerIds.find((id) => id !== userId);
+
+        console.log(`[Match Server] 🏳️ User ${userId} forfeited match ${matchId}. Winner: ${winnerId}`);
+
+        await matchHandler.transitionPhase(roomId, "completed");
+
+        if (winnerId) {
+          try {
+            const result = await completeMatch({
+              matchId: room.matchId,
+              reason: "forfeit",
+              forcedWinnerId: winnerId,
+            });
+
+            if (result.success) {
+              console.log(
+                `[Match Server] 🏆 Match ${room.matchId} completed by forfeit. Winner: ${winnerId}`
+              );
+
+              // Emit match_result to both players
+              for (const playerId of room.playerIds) {
+                const playerSocketId = matchHandler.getSocketForUser(playerId);
+                if (playerSocketId) {
+                  const isPlayerOne = playerId === room.playerIds[0];
+                  const ratingChange = isPlayerOne ? result.ratingChanges?.playerOne : result.ratingChanges?.playerTwo;
+
+                  io.to(playerSocketId).emit(SOCKET_EVENTS.MATCH_RESULT, {
+                    roomId: room.roomId,
+                    matchId: room.matchId,
+                    winnerId,
+                    you: ratingChange ? {
+                      ratingBefore: ratingChange.before,
+                      ratingAfter: ratingChange.after,
+                      delta: ratingChange.delta,
+                    } : { ratingBefore: 0, ratingAfter: 0, delta: 0 },
+                    reason: "forfeit",
+                  });
+                }
+              }
+            } else {
+              console.error("[Match Server] Forfeit completion failed:", result.error);
+            }
+          } catch (forfeitErr) {
+            console.error("[Match Server] Error in forfeit resolution:", forfeitErr);
+          }
+        }
+      } else {
+        return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+          code: "INVALID_STATE",
+          message: "Match cannot be forfeited in its current state",
+        });
+      }
+    } catch (err: any) {
+      console.error(`[Match Server] Error in forfeit_match:`, err.message);
+      socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
+        code: "FORFEIT_FAILED",
         message: err.message,
       });
     }

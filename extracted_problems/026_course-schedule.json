@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0",
+  "id": "P026",
+  "slug": "course-schedule",
+  "title": "Course Schedule",
+  "difficulty": "MEDIUM",
+  "statement": "Given prerequisite pairs, determine whether all courses can be completed.",
+  "input_format": "Arguments are supplied directly to the Solution method by the platform test harness.",
+  "output_format": "Return the value specified by the method signature.",
+  "constraints": "Use constraints appropriate to the implementation. Add stronger constraints before production use.",
+  "judge": {
+    "type": "EXACT_MATCH",
+    "unordered_output": false,
+    "mutates_input": false
+  },
+  "languages": {
+    "java": {
+      "class_name": "Solution",
+      "method_signature": "boolean canFinish(int numCourses, int[][] prerequisites)",
+      "starter_code": "import java.util.*;\n\nclass Solution {\n    public boolean canFinish(int numCourses, int[][] prerequisites) {\n        // TODO: implement\n        return null;\n    }\n}"
+    }
+  },
+  "public_tests": [
+    {
+      "input": {
+        "numCourses": 2,
+        "prerequisites": [
+          [
+            1,
+            0
+          ]
+        ]
+      },
+      "expected_output": true
+    },
+    {
+      "input": {
+        "numCourses": 2,
+        "prerequisites": [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      },
+      "expected_output": false
+    },
+    {
+      "input": {
+        "numCourses": 1,
+        "prerequisites": []
+      },
+      "expected_output": true
+    }
+  ],
+  "hidden_tests": [
+    {
+      "id": "H001",
+      "input": {
+        "numCourses": 2,
+        "prerequisites": [
+          [
+            1,
+            0
+          ]
+        ]
+      },
+      "expected_output": true
+    },
+    {
+      "id": "H002",
+      "input": {
+        "numCourses": 2,
+        "prerequisites": [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      },
+      "expected_output": false
+    },
+    {
+      "id": "H003",
+      "input": {
+        "numCourses": 1,
+        "prerequisites": []
+      },
+      "expected_output": true
+    }
+  ],
+  "notes": "Problem statement and starter code are original platform content. Verify licenses before importing third-party problem statements or tests."
+}

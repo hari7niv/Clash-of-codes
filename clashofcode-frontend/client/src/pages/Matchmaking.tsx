@@ -18,7 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { usePlayerData } from "@/hooks/usePlayerData";
 import { useMatchSocket } from "@/hooks/useMatchSocket";
 
@@ -92,6 +92,16 @@ export default function Matchmaking() {
   const [activeOpponent, setActiveOpponent] = useState(0);
   const [searchStep, setSearchStep] = useState(0);
   const [foundMatch, setFoundMatch] = useState<any>(null);
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (state === "found" && foundMatch?.matchId) {
+      const timer = setTimeout(() => {
+        setLocation(`/battle/${foundMatch.matchId}`);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [state, foundMatch, setLocation]);
 
   useEffect(() => {
     if (!socket) return;
@@ -433,7 +443,7 @@ export default function Matchmaking() {
                 </button>
               </div>
               <p className="mt-5 text-center text-xs text-[#858893]">
-                Both players have 30 seconds to enter. Good luck.
+                Entering battle in 3 seconds...
               </p>
             </div>
           </section>
