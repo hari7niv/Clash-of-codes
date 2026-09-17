@@ -153,41 +153,31 @@ async function runMatchmakingCycle(
           );
           const problemRow = problemResult.rows[0];
 
-          let sampleTests: Array<{ input: string; expectedOutput: string }> = [];
-          if (problemRow) {
-            const testCasesResult = await pool.query(
-              "SELECT input, expected_output FROM test_cases WHERE problem_id = $1 AND is_sample = true ORDER BY ordinal ASC",
-              [problemRow.id]
-            );
-            sampleTests = testCasesResult.rows.map((tc: any) => ({
-              input: tc.input,
-              expectedOutput: tc.expected_output,
-            }));
+          if (!problemRow) {
+            console.warn("[Matchmaking] No problems available in database for pairing");
+            continue;
           }
 
-          const publicProblem: PublicProblem = problemRow
-            ? {
-                id: problemRow.id,
-                slug: problemRow.slug,
-                title: problemRow.title,
-                statement: problemRow.statement,
-                difficulty: problemRow.difficulty,
-                timeLimitMs: problemRow.time_limit_ms,
-                memoryLimitKb: problemRow.memory_limit_kb,
-                tags: problemRow.tags || [],
-                sampleTests,
-              }
-            : {
-                id: "00000000-0000-0000-0000-000000000001",
-                slug: "two-sum",
-                title: "Two Sum",
-                statement: "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.",
-                difficulty: "easy",
-                timeLimitMs: 2000,
-                memoryLimitKb: 262144,
-                tags: ["Array", "Hash Table"],
-                sampleTests: [],
-              };
+          const testCasesResult = await pool.query(
+            "SELECT input, expected_output FROM test_cases WHERE problem_id = $1 AND is_sample = true ORDER BY ordinal ASC",
+            [problemRow.id]
+          );
+          const sampleTests = testCasesResult.rows.map((tc: any) => ({
+            input: tc.input,
+            expectedOutput: tc.expected_output,
+          }));
+
+          const publicProblem: PublicProblem = {
+            id: problemRow.id,
+            slug: problemRow.slug,
+            title: problemRow.title,
+            statement: problemRow.statement,
+            difficulty: problemRow.difficulty,
+            timeLimitMs: problemRow.time_limit_ms,
+            memoryLimitKb: problemRow.memory_limit_kb,
+            tags: problemRow.tags || [],
+            sampleTests,
+          };
 
           const matchDurationMs = 300_000;
           const now = new Date();

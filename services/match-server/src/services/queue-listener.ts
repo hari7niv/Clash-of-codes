@@ -10,6 +10,7 @@ import { MatchHandler } from "./match-handler.js";
 import type { ClientToServerEvents, ServerToClientEvents, SocketData } from "@clashofcode/shared";
 import { SOCKET_EVENTS } from "@clashofcode/shared";
 import { completeMatch } from "./match-completion.js";
+import { pool } from "../db/client.js";
 
 export async function listenToMatchQueue(
   io: Server<ClientToServerEvents, ServerToClientEvents, {}, SocketData>,
@@ -17,9 +18,20 @@ export async function listenToMatchQueue(
   matchHandler?: MatchHandler
 ): Promise<void> {
   const JUDGE_QUEUE_NAME = process.env.JUDGE_QUEUE_NAME || "judge";
+  const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 
   const queueEvents = new QueueEvents(JUDGE_QUEUE_NAME, {
-    connection: redisConnection,
+    connection: {
+      url: REDIS_URL,
+      maxRetriesPerRequest: null,
+    },
+  });
+
+  const judgeQueue = new Queue(JUDGE_QUEUE_NAME, {
+    connection: {
+      url: REDIS_URL,
+      maxRetriesPerRequest: null,
+    },
   });
 
   console.log(
@@ -33,8 +45,6 @@ export async function listenToMatchQueue(
         `[Match Server] ✅ Judge job ${jobId} completed with verdict`
       );
 
-      // Create a Queue instance to fetch the job details
-      const judgeQueue = new Queue(JUDGE_QUEUE_NAME, { connection: redisConnection });
       const job = await judgeQueue.getJob(jobId);
 
       if (!job) {
@@ -62,7 +72,27 @@ export async function listenToMatchQueue(
 
       // If matchHandler is provided, route verdict to the correct room
       if (matchHandler) {
-        const roomId = matchHandler.getRoomForSubmission(submissionId);
+        let roomId = matchHandler.getRoomForSubmission(submissionId);
+        let submitterId: string | undefined;
+
+        if (!roomId) {
+          try {
+            const subRes = await pool.query(
+              "SELECT match_id, user_id FROM submissions WHERE id = $1",
+              [submissionId]
+            );
+            if (subRes.rows.length > 0) {
+              const { match_id, user_id } = subRes.rows[0];
+              submitterId = user_id;
+              if (match_id) {
+                roomId = (await matchHandler.getRoomIdForMatch(match_id)) || undefined;
+              }
+            }
+          } catch (dbErr: any) {
+            console.error(`[Match Server] DB error finding room for submission ${submissionId}:`, dbErr.message);
+          }
+        }
+
         if (!roomId) {
           console.warn(
             `[Match Server] Could not find room for submission ${submissionId}`
@@ -76,15 +106,22 @@ export async function listenToMatchQueue(
           return;
         }
 
-        // Parse verdict from returnvalue (should be { verdict, passedTests, totalTests, runtimeMs, testResults })
-        const verdict = returnvalue as any;
+        // Parse verdict from returnvalue (handles serialized JSON strings from BullMQ)
+        let verdict = returnvalue as any;
+        if (typeof verdict === "string") {
+          try {
+            verdict = JSON.parse(verdict);
+          } catch (e: any) {
+            console.error(`[Match Server] Error parsing verdict JSON for submission ${submissionId}:`, e.message);
+          }
+        }
 
         // Extract console output from first failed test or last test
         let stdout = "";
         let stderr = "";
         let compileOutput = "";
         
-        if (verdict.testResults && Array.isArray(verdict.testResults)) {
+        if (verdict?.testResults && Array.isArray(verdict.testResults)) {
           // Find first failed test, or use last test if all passed
           const failedTest = verdict.testResults.find((t: any) => !t.passed);
           const testToShow = failedTest || verdict.testResults[verdict.testResults.length - 1];
@@ -99,21 +136,23 @@ export async function listenToMatchQueue(
         // Update submission with verdict
         matchHandler.updateSubmissionVerdict(
           submissionId,
-          verdict.verdict || "error",
-          verdict.passedTests || 0,
-          verdict.totalTests || 0
+          verdict?.verdict || "error",
+          verdict?.passedTests || 0,
+          verdict?.totalTests || 0
         );
 
         // Get the submitter's user ID
-        const submission = room.submissions.get(submissionId);
-        if (!submission) {
+        if (!submitterId) {
+          const submission = room.submissions.get(submissionId);
+          submitterId = submission?.userId;
+        }
+
+        if (!submitterId) {
           console.warn(
-            `[Match Server] Submission ${submissionId} not found in room ${roomId}`
+            `[Match Server] Submission submitter not found for ${submissionId} in room ${roomId}`
           );
           return;
         }
-
-        const submitterId = submission.userId;
         const opponentIds = room.playerIds.filter((id) => id !== submitterId);
         if (opponentIds.length === 0) {
           console.warn(`[Match Server] Could not find any opponents for submission in room ${roomId}`);

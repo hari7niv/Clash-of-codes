@@ -22,50 +22,7 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { MatchLine, Pill } from "@/components/ArenaPrimitives";
 
-// --- Starter code templates (stdin/stdout style) ---
-const starterCodes: Record<string, string> = {
-  python: `import sys
-input = sys.stdin.readline
-
-def solve():
-    # Read input and print output
-    pass
-
-solve()`,
-  javascript: `const lines = require('fs').readFileSync(0,'utf-8').split('\\n');
-let ptr = 0;
-const readline = () => lines[ptr++]?.trim() ?? '';
-
-// Write your solution here
-`,
-  typescript: `import * as fs from 'fs';
-const lines = fs.readFileSync(0,'utf-8').split('\\n');
-let ptr = 0;
-const readline = (): string => lines[ptr++]?.trim() ?? '';
-
-// Write your solution here
-`,
-  java: `import java.util.*;
-import java.io.*;
-
-public class Main {
-    public static void main(String[] args) throws Exception {
-        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-        // Read input and print output
-    }
-}`,
-  cpp: `#include <bits/stdc++.h>
-using namespace std;
-
-int main() {
-    ios_base::sync_with_stdio(false);
-    cin.tie(NULL);
-    
-    // Write your solution here
-    
-    return 0;
-}`,
-};
+// --- Starter code templates removed in favor of dynamic DB starterCode ---
 
 const VERDICT_META: Record<string, { label: string; color: string; bg: string }> = {
   accepted:             { label: "Accepted",              color: "#6cb369", bg: "#6cb36915" },
@@ -195,7 +152,7 @@ export default function PracticeProblem() {
   const [loading, setLoading] = useState(true);
   const [runState, setRunState] = useState<RunState>("idle");
   const [language, setLanguage] = useState("python");
-  const [code, setCode] = useState(starterCodes.python);
+  const [code, setCode] = useState("");
   const [result, setResult] = useState<SubmissionResult | null>(null);
   const [activeTab, setActiveTab] = useState<"testcase" | "result">("testcase");
   const [activeTestIdx, setActiveTestIdx] = useState(0);
@@ -221,8 +178,10 @@ export default function PracticeProblem() {
 
   // Update code when language changes
   useEffect(() => {
-    setCode(starterCodes[language] || starterCodes.python);
-  }, [language]);
+    if (problem && problem.starterCode) {
+      setCode(problem.starterCode[language] || problem.starterCode.python || "");
+    }
+  }, [language, problem]);
 
   const pollResult = async (submissionId: string) => {
     let attempts = 0;

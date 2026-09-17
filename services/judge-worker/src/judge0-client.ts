@@ -42,15 +42,20 @@ export class Judge0Client {
         memoryLimit = Math.max(memoryLimit || 0, 2097152);
       } else if (submission.language_id === 62) {
         // Java (62) reserves Metaspace and heap
-        memoryLimit = Math.max(memoryLimit || 0, 4194304);
+        memoryLimit = Math.max(memoryLimit || 0, 4096000);
       }
 
       const payload = {
         enable_network: false,
         enable_per_process_and_thread_time_limit: true,
         enable_per_process_and_thread_memory_limit: true,
-        max_processes_and_or_threads: 64,
+        max_processes_and_or_threads: submission.language_id === 62 ? 120 : 64,
+        compiler_options: submission.language_id === 62 ? "-J-Xmx256m -J-Xms256m" : undefined,
+        run_options: submission.language_id === 62 ? "-Xmx256m -Xms256m" : undefined,
         ...submission,
+        source_code: submission.source_code ? Buffer.from(submission.source_code).toString('base64') : undefined,
+        stdin: submission.stdin ? Buffer.from(submission.stdin).toString('base64') : undefined,
+        expected_output: submission.expected_output ? Buffer.from(submission.expected_output).toString('base64') : undefined,
         memory_limit: memoryLimit,
       };
 
@@ -64,7 +69,7 @@ export class Judge0Client {
 
       const response = await axios.post(`${this.baseUrl}/submissions`, payload, {
         params: {
-          base64_encoded: false,
+          base64_encoded: true,
           wait: false, // Don't wait for result, we'll poll
         },
         headers: {
@@ -91,14 +96,19 @@ export class Judge0Client {
     try {
       const response = await axios.get(`${this.baseUrl}/submissions/${token}`, {
         params: {
-          base64_encoded: false,
+          base64_encoded: true,
         },
         headers: {
           "X-Auth-Token": this.apiKey,
         },
       });
 
-      return response.data;
+      const data = response.data;
+      if (data.stdout) data.stdout = Buffer.from(data.stdout, 'base64').toString('utf8');
+      if (data.stderr) data.stderr = Buffer.from(data.stderr, 'base64').toString('utf8');
+      if (data.compile_output) data.compile_output = Buffer.from(data.compile_output, 'base64').toString('utf8');
+
+      return data;
     } catch (error) {
       const axiosError = error as AxiosError;
       console.error("[Judge0 Client] Get result failed:");

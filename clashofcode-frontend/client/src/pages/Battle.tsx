@@ -268,6 +268,9 @@ export default function Battle() {
       runtimeMs?: number | null;
       testResults?: TestResult[];
     }) => {
+      if (payload.verdict === "pending") {
+        return;
+      }
       setRunState("done");
       setVerdict(payload.verdict as Verdict);
       setPassedTests(payload.passedTests);
@@ -281,16 +284,24 @@ export default function Battle() {
     
     const handleDisconnect = () => setOpponentConnected(false);
     const handleReconnect = () => setOpponentConnected(true);
+    const handleError = (payload: any) => {
+      console.error("[Battle] Socket error:", payload);
+      setRunState("done");
+    };
     
     socket.on("timer_sync", handleTimer as any);
     socket.on("submission_result", handleResult as any);
     socket.on("opponent_disconnected", handleDisconnect);
     socket.on("opponent_reconnected", handleReconnect);
+    socket.on("error", handleError as any);
+    socket.on("error_event", handleError as any);
     return () => {
       socket.off("timer_sync", handleTimer as any);
       socket.off("submission_result", handleResult as any);
       socket.off("opponent_disconnected", handleDisconnect);
       socket.off("opponent_reconnected", handleReconnect);
+      socket.off("error", handleError as any);
+      socket.off("error_event", handleError as any);
     };
   }, [socket, matchId, roomId]);
 
@@ -376,10 +387,10 @@ export default function Battle() {
             <span className="font-mono text-[10px] text-[#8f929c]">{player.rating}</span>
           </div>
           {opponents.map((opp: any) => (
-            <div key={opp.handle} className="battle-player">
+            <div key={opp.id || opp.handle || opp.username} className="battle-player">
               <Avatar initials={opp.initials} tone="blue" size="sm" />
               <div className="flex flex-col ml-2">
-                <span className="font-mono text-[11px] text-[#d5d6da] leading-none mb-0.5">{opp.handle}</span>
+                <span className="font-mono text-[11px] text-[#d5d6da] leading-none mb-0.5">{opp.handle || opp.username}</span>
                 <span className="font-mono text-[10px] text-[#8f929c] leading-none">{opp.rating}</span>
               </div>
             </div>

@@ -38,8 +38,8 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
       // Wait, if userId is the current user, they are excluded from `opponents` because `rm.user_id != currentUserId`!
       // So I just need to check if they are playerOne, playerTwo, or if there's a record in room_members for this user.
       // Actually, since they are in roomMembers, let's just query roomMembers to verify participation for room mode!
-      const [member] = await db.execute(sql`SELECT 1 FROM room_members rm JOIN rooms r ON rm.room_id = r.id WHERE r.code = ${data.match.roomCode} AND rm.user_id = ${userId}`);
-      isParticipant = !!member;
+      const memberRes = await db.execute(sql`SELECT 1 FROM room_members rm JOIN rooms r ON rm.room_id = r.id WHERE r.code = ${data.match.roomCode} AND rm.user_id = ${userId}`);
+      isParticipant = memberRes.rows.length > 0;
     } else {
       isParticipant = data.match.playerOneId === userId || data.match.playerTwoId === userId;
     }
@@ -75,8 +75,8 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
         }
       } : null,
       opponents: data.opponents.map((opp: any) => ({
-        handle: opp.username,
-        initials: opp.username.substring(0, 2).toUpperCase(),
+        handle: opp.handle,
+        initials: opp.initials || opp.handle?.substring(0, 2).toUpperCase() || "?",
         rating: Math.round(opp.rating || 1500)
       })),
       timeRemainingSeconds,
@@ -103,8 +103,8 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
       // Check if user is part of the match
       let belongsToMatch = false;
       if (matchData.match.mode === "room") {
-        const [member] = await db.execute(sql`SELECT 1 FROM room_members rm JOIN rooms r ON rm.room_id = r.id WHERE r.code = ${matchData.match.roomCode} AND rm.user_id = ${userId}`);
-        belongsToMatch = !!member;
+        const memberRes = await db.execute(sql`SELECT 1 FROM room_members rm JOIN rooms r ON rm.room_id = r.id WHERE r.code = ${matchData.match.roomCode} AND rm.user_id = ${userId}`);
+        belongsToMatch = memberRes.rows.length > 0;
       } else {
         belongsToMatch = matchData.match.playerOneId === userId || matchData.match.playerTwoId === userId;
       }
@@ -180,8 +180,8 @@ export const matchRoutes: FastifyPluginAsync = async (app) => {
       // Verify user is part of match
       let isParticipant = false;
       if (matchData.match.mode === "room") {
-        const [member] = await db.execute(sql`SELECT 1 FROM room_members rm JOIN rooms r ON rm.room_id = r.id WHERE r.code = ${matchData.match.roomCode} AND rm.user_id = ${userId}`);
-        isParticipant = !!member;
+        const memberRes = await db.execute(sql`SELECT 1 FROM room_members rm JOIN rooms r ON rm.room_id = r.id WHERE r.code = ${matchData.match.roomCode} AND rm.user_id = ${userId}`);
+        isParticipant = memberRes.rows.length > 0;
       } else {
         isParticipant = matchData.match.playerOneId === userId || matchData.match.playerTwoId === userId;
       }

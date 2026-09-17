@@ -27,6 +27,19 @@ export interface CreateSubmissionResult {
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const JUDGE_QUEUE_NAME = process.env.JUDGE_QUEUE_NAME || "judge";
 
+let judgeQueue: Queue | null = null;
+function getJudgeQueue(): Queue {
+  if (!judgeQueue) {
+    judgeQueue = new Queue(JUDGE_QUEUE_NAME, {
+      connection: {
+        url: REDIS_URL,
+        maxRetriesPerRequest: null,
+      },
+    });
+  }
+  return judgeQueue;
+}
+
 /**
  * Validates and creates a submission
  * Returns submissionId on success
@@ -137,19 +150,12 @@ export async function createSubmission(
     );
 
     // Enqueue judge job (single source of truth)
-    const judgeQueue = new Queue(JUDGE_QUEUE_NAME, {
-      connection: {
-        url: REDIS_URL,
-      },
-    });
-
-    await judgeQueue.add(`judge-${submissionId}`, {
+    const queue = getJudgeQueue();
+    await queue.add(`judge-${submissionId}`, {
       submissionId,
       testMode,
       action,
     });
-
-    await judgeQueue.close();
 
     console.log(
       `[Submission Service] 📤 Enqueued judge job for submission ${submissionId} (testMode: ${testMode})`

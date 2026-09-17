@@ -1,7 +1,8 @@
 import { Job } from "bullmq";
 import { getDatabase } from "./db.js";
 import { Judge0Client } from "./judge0-client.js";
-import { compareOutput } from "./output-comparator.js";
+import { compareOutput, compareJsonOutput } from "./output-comparator.js";
+import { generatePythonHarness, generateJavaScriptHarness, generateCppHarness, generateJavaHarness, serializeForCppJava } from "./harness-generator.js";
 import { mapJudge0StatusToVerdict, Verdict } from "./verdict-mapper.js";
 import postgres from "postgres";
 
@@ -35,6 +36,7 @@ interface Problem {
   slug: string;
   time_limit_ms: number;
   memory_limit_kb: number;
+  function_signature?: any;
 }
 
 interface TestCase {
@@ -119,7 +121,7 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
 
     // Fetch problem details
     const problems = await sql<Problem[]>`
-      SELECT id, slug, time_limit_ms, memory_limit_kb
+      SELECT id, slug, time_limit_ms, memory_limit_kb, function_signature
       FROM problems
       WHERE id = ${submission.problem_id}
     `;
@@ -172,12 +174,29 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
       console.log(`  - Expected output length: ${testCase.expected_output.length} chars`);
 
       try {
+        let sourceCode = submission.source_code;
+        let testCaseInput = testCase.input;
+        
+        if (problem.function_signature) {
+          if (submission.language === 'python' || submission.language === 'python3') {
+            sourceCode = generatePythonHarness(submission.source_code, problem.function_signature);
+          } else if (submission.language === 'javascript' || submission.language === 'js' || submission.language === 'node') {
+            sourceCode = generateJavaScriptHarness(submission.source_code, problem.function_signature);
+          } else if (submission.language === 'java') {
+            sourceCode = generateJavaHarness(submission.source_code, problem.function_signature);
+            testCaseInput = serializeForCppJava(testCase.input, problem.function_signature);
+          } else if (submission.language === 'cpp' || submission.language === 'c++') {
+            sourceCode = generateCppHarness(submission.source_code, problem.function_signature);
+            testCaseInput = serializeForCppJava(testCase.input, problem.function_signature);
+          }
+        }
+
         // Submit to Judge0 (note: expected_output is not used by Judge0 for execution)
         const cpuTimeLimit = Math.ceil(problem.time_limit_ms / 1000);
         const { token } = await judge0.submit({
           language_id: languageId,
-          source_code: submission.source_code,
-          stdin: testCase.input,
+          source_code: sourceCode,
+          stdin: testCaseInput,
           cpu_time_limit: cpuTimeLimit,
           wall_time_limit: cpuTimeLimit * 2, // Wall time should be higher than CPU time
           memory_limit: problem.memory_limit_kb,
@@ -207,10 +226,18 @@ export async function judgeProcessor(job: Job<JudgeJobData>) {
         let details = result.status.description;
 
         if (verdict === "accepted") {
-          const comparison = compareOutput(
-            testCase.expected_output,
-            result.stdout || ""
-          );
+          let comparison;
+          if (problem.function_signature) {
+            comparison = compareJsonOutput(
+              testCase.expected_output,
+              result.stdout || ""
+            );
+          } else {
+            comparison = compareOutput(
+              testCase.expected_output,
+              result.stdout || ""
+            );
+          }
           testPassed = comparison.passed;
           details = comparison.details.join(", ");
           

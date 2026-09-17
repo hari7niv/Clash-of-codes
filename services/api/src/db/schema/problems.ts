@@ -13,6 +13,7 @@ export const problems = pgTable("problems", {
   examples: jsonb("examples").default([]).notNull(),
   constraints: text("constraints").array().default([]).notNull(),
   starterCode: jsonb("starter_code").default({}).notNull(),
+  functionSignature: jsonb("function_signature"),
   isDraft: boolean("is_draft").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

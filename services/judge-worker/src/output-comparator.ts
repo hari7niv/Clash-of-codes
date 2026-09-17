@@ -84,6 +84,26 @@ export function compareLineByLine(
 }
 
 /**
+ * Deep compares two JSON strings
+ */
+export function compareJsonOutput(expected: string, actual: string): { passed: boolean; details: string[] } {
+  try {
+    const expObj = JSON.parse(expected);
+    const actObj = JSON.parse(actual);
+    
+    // Deep equality comparison
+    const passed = JSON.stringify(expObj) === JSON.stringify(actObj);
+    if (passed) {
+      return { passed: true, details: ["JSON output match"] };
+    } else {
+      return { passed: false, details: [`Expected JSON: ${expected}, got: ${actual}`] };
+    }
+  } catch (e) {
+    return { passed: false, details: [`Failed to parse JSON output. Actual: ${actual}`] };
+  }
+}
+
+/**
  * Main comparison function - compares expected vs actual output
  */
 export function compareOutput(

@@ -276,6 +276,15 @@ io.on("connection", (socket) => {
         });
       }
 
+      // Auto-activate room if in waiting or countdown phase
+      if (room.phase === "waiting" || room.phase === "countdown") {
+        console.log(`[Match Server] Auto-activating room ${activeRoomId} on code submission`);
+        const now = Date.now();
+        if (!room.startedAt) room.startedAt = now;
+        if (!room.endsAt) room.endsAt = now + 600_000;
+        await matchHandler.transitionPhase(activeRoomId, "active");
+      }
+
       // Validate match is in correct phase
       if (room.phase !== "active" && room.phase !== "judging") {
         return socket.emit(SOCKET_EVENTS.ERROR_EVENT, {
@@ -365,7 +374,7 @@ io.on("connection", (socket) => {
       if (!roomId) {
         try {
           const res = await pool.query(
-            "SELECT id, problem_id, player_one_id, player_two_id, mode, room_code FROM matches WHERE id = $1",
+            "SELECT id, problem_id, player_one_id, player_two_id, mode, room_code, status, started_at, ended_at FROM matches WHERE id = $1",
             [matchId]
           );
           
@@ -393,6 +402,17 @@ io.on("connection", (socket) => {
               playerIds,
               matchRow.problem_id
             );
+
+            // Activate room immediately for match
+            const room = matchHandler.getRoom(roomId);
+            if (room) {
+              const now = Date.now();
+              const startedAt = matchRow.started_at ? new Date(matchRow.started_at).getTime() : now;
+              const endsAt = matchRow.ended_at ? new Date(matchRow.ended_at).getTime() : (startedAt + 600_000);
+              room.startedAt = startedAt;
+              room.endsAt = endsAt;
+              await matchHandler.transitionPhase(roomId, "active");
+            }
           }
         } catch (dbErr: any) {
           console.error(`[Match Server] Failed to hydrate room for match ${matchId}:`, dbErr.message);
@@ -519,6 +539,14 @@ io.on("connection", (socket) => {
           code: "NOT_AUTHORIZED",
           message: "You are not part of this room",
         });
+      }
+
+      // Ensure room is active if player reconnects to an ongoing match
+      if (room.phase === "waiting") {
+        const now = Date.now();
+        if (!room.startedAt) room.startedAt = now;
+        if (!room.endsAt) room.endsAt = now + 600_000;
+        await matchHandler.transitionPhase(roomId, "active");
       }
 
       // Clear any pending grace timer for this user

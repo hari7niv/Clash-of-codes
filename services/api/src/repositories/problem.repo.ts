@@ -73,13 +73,8 @@ export const getProblemById = async (id: string) => {
       input: tc.input,
       output: tc.expectedOutput
     })),
-    starterCode: {
-      python: `def solve():\n    # write code here\n    pass`,
-      java: `public class Solution {\n    public static void solve() {\n        // write code here\n    }\n}`,
-      cpp: `#include <iostream>\nusing namespace std;\n\nvoid solve() {\n    // write code here\n}`,
-      javascript: `function solve() {\n  // write code here\n}`,
-      typescript: `function solve(): void {\n  // write code here\n}`
-    }
+    starterCode: problem.starterCode,
+    functionSignature: problem.functionSignature
   };
 };
 
